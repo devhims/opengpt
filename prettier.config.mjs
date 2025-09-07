@@ -1,0 +1,13 @@
+export default {
+  // Sorts Tailwind classnames; optional but recommended for this repo.
+  plugins: ['prettier-plugin-tailwindcss'],
+
+  // Core formatting preferences
+  semi: true,
+  singleQuote: true,
+  trailingComma: 'all',
+  tabWidth: 2,
+  printWidth: 100,
+  bracketSpacing: true,
+  arrowParens: 'always',
+};
