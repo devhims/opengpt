@@ -105,11 +105,11 @@ export async function testModel(
       Object.entries(optimalParams).forEach(([key, value]) => {
         const range = schema.paramRanges?.[key as keyof typeof schema.paramRanges];
         if (range && typeof range === 'object' && typeof value === 'number') {
-          if ('min' in range && range.min !== undefined && value < range.min) {
-            optimalParams[key] = range.min;
+          if ('min' in range && (range as any).min !== undefined && value < (range as any).min) {
+            optimalParams[key] = (range as any).min;
           }
-          if ('max' in range && range.max !== undefined && value > range.max) {
-            optimalParams[key] = range.max;
+          if ('max' in range && (range as any).max !== undefined && value > (range as any).max) {
+            optimalParams[key] = (range as any).max;
           }
         }
       });

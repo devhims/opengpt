@@ -124,8 +124,10 @@ export const IMAGE_MODEL_SCHEMAS = {
     },
     paramRanges: {
       guidance: { min: 0, max: 10 },
-      height: { min: 256, max: 2500 },
-      width: { min: 256, max: 2500 },
+      // Docs list min 0 and max 2500 for both
+      height: { min: 0, max: 2500 },
+      width: { min: 0, max: 2500 },
+      // Prefer `steps` for this model to avoid duplication in payloads
       steps: { min: 1, max: 40 },
     },
     outputFormat: 'base64' as const,
@@ -143,16 +145,21 @@ export const IMAGE_MODEL_SCHEMAS = {
     isPartner: true,
     capabilities: ['text-to-image', 'prompt-adherence', 'coherent-text'] as const,
     defaultParams: {
-      guidance: 2,
+      // Tuned for better default quality while keeping speed reasonable
+      guidance: 2.5,
       height: 1024,
       width: 1024,
-      num_steps: 25,
+      num_steps: 35,
+      negative_prompt:
+        'low quality, low-res, grain, noisy, noise, artifacts, jpeg artifacts, blurry, deformed, oversharpened',
     },
     paramRanges: {
       guidance: { min: 2, max: 10 },
-      height: { min: 256, max: 2048 },
-      width: { min: 256, max: 2048 },
+      // Docs list min 0 and max 2048
+      height: { min: 0, max: 2048 },
+      width: { min: 0, max: 2048 },
       num_steps: { min: 1, max: 50 },
+      negative_prompt: { minLength: 1 },
     },
     outputFormat: 'binary' as const,
     performance: {
@@ -194,7 +201,8 @@ export const IMAGE_MODEL_SCHEMAS = {
     isBeta: true,
     capabilities: ['text-to-image', 'fast-generation', 'img2img', 'inpainting'] as const,
     defaultParams: {
-      num_steps: 4, // Optimized for speed
+      // Per docs: num_steps default 20, max 20. Height/width not specified, choose sensible defaults.
+      num_steps: 20,
       guidance: 7.5,
       height: 1024,
       width: 1024,
@@ -202,8 +210,8 @@ export const IMAGE_MODEL_SCHEMAS = {
     paramRanges: {
       height: { min: 256, max: 2048 },
       width: { min: 256, max: 2048 },
-      num_steps: { min: 1, max: 8 }, // Lightning models work best with fewer steps
-      guidance: { min: 1, max: 15 },
+      num_steps: { min: 20, max: 20 },
+      // strength and guidance are accepted; docs specify defaults but no explicit min/max beyond description
       strength: { min: 0, max: 1 },
     },
     outputFormat: 'binary' as const,
@@ -223,7 +231,8 @@ export const IMAGE_MODEL_SCHEMAS = {
     isPartner: false,
     capabilities: ['text-to-image', 'photorealism', 'img2img', 'inpainting'] as const,
     defaultParams: {
-      num_steps: 4, // LCM (Latent Consistency Model) works well with fewer steps
+      // Per docs: num_steps default 20, max 20. Height/width not specified, choose sensible defaults.
+      num_steps: 20,
       guidance: 7.5,
       height: 1024,
       width: 1024,
@@ -231,8 +240,7 @@ export const IMAGE_MODEL_SCHEMAS = {
     paramRanges: {
       height: { min: 256, max: 2048 },
       width: { min: 256, max: 2048 },
-      num_steps: { min: 1, max: 8 }, // LCM optimized
-      guidance: { min: 1, max: 15 },
+      num_steps: { min: 20, max: 20 },
       strength: { min: 0, max: 1 },
     },
     outputFormat: 'binary' as const,
@@ -253,7 +261,7 @@ export const IMAGE_MODEL_SCHEMAS = {
     isBeta: true,
     capabilities: ['text-to-image', 'img2img', 'inpainting'] as const,
     defaultParams: {
-      num_steps: 8, // Balanced for quality and speed
+      num_steps: 20,
       guidance: 7.5,
       height: 1024,
       width: 1024,
@@ -261,8 +269,7 @@ export const IMAGE_MODEL_SCHEMAS = {
     paramRanges: {
       height: { min: 256, max: 2048 },
       width: { min: 256, max: 2048 },
-      num_steps: { min: 1, max: 20 },
-      guidance: { min: 1, max: 15 },
+      num_steps: { min: 20, max: 20 },
       strength: { min: 0, max: 1 },
     },
     outputFormat: 'binary' as const,
@@ -273,15 +280,15 @@ export const IMAGE_MODEL_SCHEMAS = {
     },
   },
 
-  // RunwayML - Specialized models (deprecated but included for completeness)
+  // RunwayML - Specialized models
   '@cf/runwayml/stable-diffusion-v1-5-img2img': {
     name: 'Stable Diffusion v1.5 Img2Img',
     provider: 'RunwayML',
-    description: 'Generate new images from input images',
+    description: 'Generate new images from input images. Supports inpainting via masks.',
     pricing: '$0.00 per step',
     isPartner: false,
     isBeta: true,
-    capabilities: ['img2img'] as const,
+    capabilities: ['img2img', 'inpainting'] as const,
     defaultParams: {
       num_steps: 20,
       strength: 0.8,
@@ -290,10 +297,9 @@ export const IMAGE_MODEL_SCHEMAS = {
       width: 512,
     },
     paramRanges: {
-      height: { min: 256, max: 1024 },
-      width: { min: 256, max: 1024 },
-      num_steps: { min: 1, max: 50 },
-      guidance: { min: 1, max: 20 },
+      height: { min: 256, max: 2048 },
+      width: { min: 256, max: 2048 },
+      num_steps: { min: 20, max: 20 },
       strength: { min: 0, max: 1 },
     },
     outputFormat: 'binary' as const,
@@ -301,36 +307,6 @@ export const IMAGE_MODEL_SCHEMAS = {
       recommendedSteps: 20,
       maxConcurrentRequests: 2,
       estimatedResponseTime: '3-6s',
-    },
-  },
-
-  '@cf/runwayml/stable-diffusion-v1-5-inpainting': {
-    name: 'Stable Diffusion v1.5 Inpainting',
-    provider: 'RunwayML',
-    description: 'Inpaint images using masks',
-    pricing: '$0.00 per step',
-    isPartner: false,
-    isBeta: true,
-    capabilities: ['inpainting'] as const,
-    defaultParams: {
-      num_steps: 20,
-      strength: 0.8,
-      guidance: 7.5,
-      height: 512,
-      width: 512,
-    },
-    paramRanges: {
-      height: { min: 256, max: 1024 },
-      width: { min: 256, max: 1024 },
-      num_steps: { min: 1, max: 50 },
-      guidance: { min: 1, max: 20 },
-      strength: { min: 0, max: 1 },
-    },
-    outputFormat: 'binary' as const,
-    performance: {
-      recommendedSteps: 20,
-      maxConcurrentRequests: 2,
-      estimatedResponseTime: '4-8s',
     },
   },
 } as const;
