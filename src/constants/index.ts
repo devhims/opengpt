@@ -69,8 +69,17 @@ export const CLOUDFLARE_AI_MODELS = {
     '@cf/meta/llama-2-7b-chat-int8',
     '@cf/meta/llama-2-7b-chat-hf-lora',
   ] as const,
-  // Ready for future expansion
-  imageGeneration: [] as const,
+  // Image generation models
+  imageGeneration: [
+    '@cf/leonardo/lucid-origin',
+    '@cf/leonardo/phoenix-1.0',
+    '@cf/black-forest-labs/flux-1-schnell',
+    '@cf/bytedance/stable-diffusion-xl-lightning',
+    '@cf/lykon/dreamshaper-8-lcm',
+    '@cf/runwayml/stable-diffusion-v1-5-img2img',
+    '@cf/runwayml/stable-diffusion-v1-5-inpainting',
+    '@cf/stabilityai/stable-diffusion-xl-base-1.0',
+  ] as const,
   embeddings: [] as const,
   speech: [] as const,
 } as const;
