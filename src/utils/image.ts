@@ -2,6 +2,33 @@ import type { ImageGenerationRequest, ImageGenerationResponse } from '@/app/api/
 import type { GeneratedImage } from '@/types';
 
 /**
+ * Rate limit error data structure
+ */
+interface RateLimitErrorData {
+  error?: string;
+  rateLimit?: {
+    type: 'chat' | 'image';
+    remaining: number;
+    resetTime: number;
+  };
+}
+
+/**
+ * Custom error class for API errors with additional properties
+ */
+export class ApiError extends Error {
+  public status: number;
+  public data?: RateLimitErrorData;
+
+  constructor(message: string, status: number, data?: RateLimitErrorData) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+  }
+}
+
+/**
  * Download generated image
  */
 export async function downloadImage(image: GeneratedImage): Promise<void> {
@@ -49,7 +76,24 @@ export async function generateImage(
   });
 
   if (!response.ok) {
-    throw new Error('Failed to generate image');
+    const contentType = response.headers.get('content-type') || '';
+    // Try to parse JSON error body for message/details
+    if (contentType.includes('application/json')) {
+      const errorData = (await response.json().catch(() => ({}))) as RateLimitErrorData;
+      const message = errorData?.error || `Request failed with status ${response.status}`;
+      if (response.status === 429) {
+        throw new ApiError(message, 429, errorData);
+      }
+      throw new ApiError(message, response.status, errorData);
+    }
+
+    // Fallback to raw text if not JSON
+    const text = await response.text().catch(() => '');
+    const message = text || `Request failed with status ${response.status}`;
+    if (response.status === 429) {
+      throw new ApiError(message, 429);
+    }
+    throw new ApiError(message, response.status);
   }
 
   return response.json();

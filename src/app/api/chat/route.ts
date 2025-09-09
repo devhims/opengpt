@@ -7,6 +7,7 @@ import {
   type ModelMessage,
 } from 'ai';
 import { type CloudflareAIModel, DEFAULT_MODEL, isValidCloudflareModel } from '@/types';
+import { checkRateLimit } from '@/utils/rate-limit';
 
 // AI SDK v5 compatible message type
 interface ChatMessage {
@@ -140,6 +141,22 @@ export async function POST(req: Request) {
   const selectedModel =
     body?.model && isValidCloudflareModel(body.model) ? body.model : DEFAULT_MODEL;
   const webSearch = body?.webSearch || false;
+
+  // Check rate limit
+  const rateLimitResult = await checkRateLimit(req, 'chat');
+  if (!rateLimitResult.allowed) {
+    return Response.json(
+      {
+        error: rateLimitResult.error,
+        rateLimit: {
+          remaining: rateLimitResult.remaining,
+          resetTime: rateLimitResult.resetTime,
+          type: 'chat',
+        },
+      },
+      { status: 429 },
+    );
+  }
 
   // Validate AI binding is available
   if (!env.AI) {

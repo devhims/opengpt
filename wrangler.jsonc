@@ -13,6 +13,13 @@
     "binding": "ASSETS",
     "directory": ".open-next/assets",
   },
+  "kv_namespaces": [
+    {
+      "binding": "RATE_LIMIT_KV",
+      "id": "1a8e983569f441e1a9d52b96475c5510",
+      "preview_id": "732c44803b5b4136a70d0a0f70575775",
+    },
+  ],
   "observability": {
     "enabled": true,
   },
@@ -33,6 +40,10 @@
    */
   // Secrets are stored outside of version control. Set with:
   //   wrangler secret put CLOUDFLARE_API_TOKEN
+  //
+  // For Upstash Redis (optional - will fallback to Cloudflare KV if not set):
+  //   wrangler secret put UPSTASH_REDIS_REST_URL
+  //   wrangler secret put UPSTASH_REDIS_REST_TOKEN
   /**
    * Note: Use secrets to store sensitive data.
    * https://developers.cloudflare.com/workers/configuration/secrets/

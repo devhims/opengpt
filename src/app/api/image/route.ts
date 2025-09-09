@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { IMAGE_MODEL_SCHEMAS, getOptimalParams, type ImageModelId } from '@/schemas/image-models';
+import { checkRateLimit } from '@/utils/rate-limit';
 
 export interface ImageGenerationRequest {
   prompt: string;
@@ -218,6 +219,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check rate limit
+    const rateLimitResult = await checkRateLimit(request as unknown as Request, 'image');
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        {
+          error: rateLimitResult.error,
+          rateLimit: {
+            remaining: rateLimitResult.remaining,
+            resetTime: rateLimitResult.resetTime,
+            type: 'image',
+          },
+        },
+        { status: 429 },
+      );
+    }
+
     if (!env.AI) {
       return NextResponse.json({ error: 'AI binding is not configured' }, { status: 500 });
     }
@@ -267,10 +284,6 @@ export async function POST(request: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const response = await env.AI.run(model as any, requestPayload);
 
-    if (!response) {
-      return NextResponse.json({ error: 'Failed to generate image' }, { status: 500 });
-    }
-
     let base64Image: string;
     let mediaType: string;
 
@@ -317,23 +330,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Image generation error:', error);
 
-    // Return more specific error messages when possible
+    // Forward the original error message as-is to the UI
     if (error instanceof Error) {
-      if (error.message.includes('timeout')) {
-        return NextResponse.json(
-          {
-            error: 'Image generation timed out. Try reducing steps or image size.',
-          },
-          { status: 504 },
-        );
-      } else if (error.message.includes('invalid')) {
-        return NextResponse.json(
-          {
-            error: 'Invalid parameters for the selected model.',
-          },
-          { status: 400 },
-        );
-      }
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

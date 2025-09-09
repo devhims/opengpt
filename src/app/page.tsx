@@ -9,9 +9,21 @@ import type { GeneratedImage } from '@/types';
 // Utils
 import { getProviderLabel } from '@/utils/chat';
 import { copyToClipboard } from '@/utils/clipboard';
-import { downloadImage, generateImage } from '@/utils/image';
+import { downloadImage, generateImage, ApiError } from '@/utils/image';
 import { getFormattedTextModels, getFormattedImageModels } from '@/utils/models';
 import { getModelSchema, type ImageModelId } from '@/schemas/image-models';
+
+/**
+ * Rate limit response data structure
+ */
+interface RateLimitResponseData {
+  error?: string;
+  rateLimit?: {
+    type: 'chat' | 'image';
+    remaining: number;
+    resetTime: number;
+  };
+}
 
 // Components
 import { ChatHeader } from '@/components/pages/chat-header';
@@ -35,6 +47,15 @@ export default function ChatPage() {
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [, setGeneratingImageId] = useState<string | null>(null);
+
+  // Rate limit error states
+  const [rateLimitError, setRateLimitError] = useState<{
+    message: string;
+    type: 'chat' | 'image';
+    remaining: number;
+    resetTime: number;
+    isRateLimit?: boolean;
+  } | null>(null);
 
   // Helper function to get default parameters for the selected image model
   const getDefaultImageParams = (modelId: string) => {
@@ -118,11 +139,138 @@ export default function ChatPage() {
 
   const providerLabel = useMemo(() => getProviderLabel(selectedModel), [selectedModel]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Clear rate limit error when mode changes
+  useEffect(() => {
+    setRateLimitError(null);
+  }, [mode]);
+
+  // Clear rate limit error after a certain time
+  useEffect(() => {
+    if (rateLimitError) {
+      const timer = setTimeout(() => {
+        setRateLimitError(null);
+      }, 10000); // Clear after 10 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [rateLimitError]);
+
+  // Format reset time for display
+  const formatResetTime = (resetTime: number) => {
+    const now = Date.now();
+    const timeLeft = Math.max(0, resetTime - now);
+    const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+    const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m`;
+    } else {
+      return 'soon';
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (input.trim()) {
-      sendMessage({ text: input });
-      setInput('');
+      try {
+        // Pre-check rate limit before sending message
+        const rateLimitCheckResponse = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messages: [{ role: 'user', content: input }],
+            model: selectedModelRef.current,
+          }),
+        });
+
+        if (!rateLimitCheckResponse.ok) {
+          if (rateLimitCheckResponse.status === 429) {
+            const errorData: RateLimitResponseData = await rateLimitCheckResponse.json();
+            if (errorData.rateLimit) {
+              setRateLimitError({
+                message: errorData.error || 'Rate limit exceeded',
+                type: errorData.rateLimit.type || 'chat',
+                remaining: errorData.rateLimit.remaining || 0,
+                resetTime: errorData.rateLimit.resetTime || Date.now() + 24 * 60 * 60 * 1000,
+                isRateLimit: true,
+              });
+            }
+            return; // Don't proceed with sending the message
+          }
+        }
+
+        await sendMessage({ text: input });
+        setInput('');
+      } catch (error: unknown) {
+        // Handle rate limit errors from chat API (fallback for any other errors)
+        console.error('Chat submission error:', error);
+
+        // Check for rate limit error in various formats (fallback)
+        let rateLimitData: RateLimitResponseData | null = null;
+
+        if (
+          error &&
+          typeof error === 'object' &&
+          'status' in error &&
+          error.status === 429 &&
+          'data' in error &&
+          error.data &&
+          typeof error.data === 'object' &&
+          'rateLimit' in error.data
+        ) {
+          // Direct API response format
+          rateLimitData = error.data as RateLimitResponseData;
+        } else if (
+          error &&
+          typeof error === 'object' &&
+          'cause' in error &&
+          error.cause &&
+          typeof error.cause === 'object' &&
+          'status' in error.cause &&
+          error.cause.status === 429 &&
+          'data' in error.cause &&
+          error.cause.data &&
+          typeof error.cause.data === 'object' &&
+          'rateLimit' in error.cause.data
+        ) {
+          // Wrapped error format from useChat
+          rateLimitData = error.cause.data as RateLimitResponseData;
+        } else if (
+          error &&
+          typeof error === 'object' &&
+          'message' in error &&
+          typeof error.message === 'string' &&
+          error.message.includes('Rate limit exceeded')
+        ) {
+          // Fallback for message-based rate limit detection
+          console.log('Detected rate limit from message');
+          setRateLimitError({
+            message: error.message,
+            type: 'chat',
+            remaining: 0,
+            resetTime: Date.now() + 24 * 60 * 60 * 1000, // 24 hours from now
+            isRateLimit: true,
+          });
+          return;
+        }
+
+        if (rateLimitData && rateLimitData.rateLimit) {
+          const rateLimit = rateLimitData.rateLimit;
+          setRateLimitError({
+            message: rateLimitData.error || 'Rate limit exceeded',
+            type: rateLimit.type || 'chat',
+            remaining: rateLimit.remaining || 0,
+            resetTime: rateLimit.resetTime || Date.now() + 24 * 60 * 60 * 1000,
+            isRateLimit: true,
+          });
+        } else {
+          // Re-throw other errors
+          throw error;
+        }
+      }
     }
   };
 
@@ -168,8 +316,46 @@ export default function ChatPage() {
 
       // Replace placeholder with actual image
       setGeneratedImages((prev) => prev.map((img) => (img.id === imageId ? newImage : img)));
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Image generation error:', error);
+
+      // Handle rate limit errors
+      if (error instanceof ApiError && error.data) {
+        const errorData = error.data;
+
+        // Handle rate limit errors
+        if (error.status === 429 && errorData.rateLimit) {
+          const rateLimit = errorData.rateLimit;
+          setRateLimitError({
+            message: error.message,
+            type: rateLimit.type,
+            remaining: rateLimit.remaining,
+            resetTime: rateLimit.resetTime,
+            isRateLimit: true,
+          });
+        } else {
+          // Display the original error message from the API
+          setRateLimitError({
+            message: error.message,
+            type: 'image',
+            remaining: 0,
+            resetTime: Date.now() + 10000, // Show for 10 seconds
+            isRateLimit: false,
+          });
+        }
+      } else {
+        // Display the original error message
+        const errorMessage =
+          error instanceof Error ? error.message : 'An unexpected error occurred';
+        setRateLimitError({
+          message: errorMessage,
+          type: 'image',
+          remaining: 0,
+          resetTime: Date.now() + 10000, // Show for 10 seconds
+          isRateLimit: false,
+        });
+      }
+
       // Remove placeholder on error
       setGeneratedImages((prev) => prev.filter((img) => img.id !== imageId));
     } finally {
@@ -181,6 +367,47 @@ export default function ChatPage() {
   return (
     <div className="bg-background flex h-dvh flex-col">
       <ChatHeader mode={mode} setMode={setMode} providerLabel={providerLabel} />
+
+      {/* Rate limit error display */}
+      {rateLimitError && (
+        <div className="mx-4 mt-2 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              {/* <div className="text-red-600 dark:text-red-400">
+                <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div> */}
+              <div className="text-sm text-red-800 dark:text-red-200">
+                {/* <p className="font-medium">Rate Limit Exceeded</p> */}
+                <p className="font-medium">{rateLimitError.message}</p>
+                {rateLimitError.isRateLimit && (
+                  <p className="mt-1 text-xs">
+                    Resets in {formatResetTime(rateLimitError.resetTime)} •{' '}
+                    {rateLimitError.remaining} remaining
+                  </p>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => setRateLimitError(null)}
+              className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+            >
+              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 flex-col">
         {mode === 'chat' ? (

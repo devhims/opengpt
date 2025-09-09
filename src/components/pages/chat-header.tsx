@@ -13,7 +13,7 @@ export function ChatHeader({ mode, setMode, providerLabel }: ChatHeaderProps) {
     <header className="bg-card/80 supports-[backdrop-filter]:bg-card/60 sticky top-0 z-20 border-b shadow-sm backdrop-blur">
       <div className="mx-auto flex w-full max-w-4xl items-center justify-between px-4 py-3 sm:px-6 sm:pt-4 sm:pb-2">
         <div className="flex flex-col sm:flex-row sm:items-baseline sm:gap-3">
-          <h1 className="text-lg font-semibold tracking-tight sm:text-xl">AiX</h1>
+          <h1 className="text-lg font-semibold tracking-tight sm:text-xl">OpenGPT</h1>
           <p className="text-muted-foreground text-xs sm:text-sm">
             {/* {mode === 'chat' ? 'Chat with Open Models' : 'Generate images with AI'} */}
             Experiment with Open Models

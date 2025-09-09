@@ -1,10 +1,12 @@
-# AiX Application Architecture
+# OpenGPT Application Architecture
 
 ## Overview
 
 This application provides a modern dual-mode interface for interacting with Cloudflare Workers AI models, featuring **chat conversation mode** and **image generation mode**. Built with **AI Elements UI components**, **intelligent reasoning token parsing**, and **dual-pathway API handling**, the architecture supports both text generation and image generation models through **AI SDK v5** standards with enhanced UX through reasoning visualization and seamless model switching.
 
 ## System Architecture
+
+### High-Level Architecture Overview
 
 ```mermaid
 graph TB
@@ -17,8 +19,11 @@ graph TB
     Chat --> ChatAPI[🚀 Chat API Route]
     ImageGen --> ImageAPI[🎨 Image API Route]
 
-    ChatAPI --> TextModels[🤖 Text Generation Models]
-    ImageAPI --> ImageModels[🎨 Image Generation Models]
+    ChatAPI --> RateLimit1[🚫 Rate Limiter]
+    ImageAPI --> RateLimit2[🚫 Rate Limiter]
+
+    RateLimit1 --> TextModels[🤖 Text Generation Models]
+    RateLimit2 --> ImageModels[🎨 Image Generation Models]
 
     UI --> Components[📦 UI Components]
     Components --> Reasoning[🧠 Reasoning Component]
@@ -33,15 +38,83 @@ graph TB
 
     Standard --> Stream[🌊 Real Streaming]
     GPT --> Batch[📋 Batch Processing]
-    FLUX --> ImageGen[🖼️ Base64 Image Response]
+    FLUX --> ImageResponse[🖼️ Base64/Binary Response]
 
     TextModels --> Response[📨 AI Response]
     Response --> Parser[🔍 Reasoning Parser]
     Parser --> UI
 
-    ImageModels --> ImageResponse[🖼️ Generated Image]
+    ImageModels --> ImageResponse
     ImageResponse --> Gallery[🎞️ Image Gallery]
     Gallery --> UI
+
+    RateLimit1 --> Storage1[💾 Redis/KV Storage]
+    RateLimit2 --> Storage1
+```
+
+### Complete Request Lifecycle
+
+```mermaid
+flowchart TD
+    Start[👤 User Initiates Request] --> UIAction{Action Type}
+
+    UIAction -->|💬 Chat Message| ChatPath[📝 Chat Request Path]
+    UIAction -->|🖼️ Image Prompt| ImagePath[🎨 Image Request Path]
+
+    %% Chat Path
+    ChatPath --> ChatValidate[✅ Frontend Validation]
+    ChatValidate --> ChatPreCheck[🔍 Optional Rate Limit Pre-check]
+    ChatPreCheck --> ChatAPI[📡 POST /api/chat]
+
+    ChatAPI --> ChatParse[📋 Parse Request Body]
+    ChatParse --> ChatValidateAPI[✅ Server Validation]
+    ChatValidateAPI --> ChatRateLimit[🚫 Rate Limit Check]
+
+    ChatRateLimit --> ChatRateResult{Rate Limit OK?}
+    ChatRateResult -->|❌ No| ChatRateError[429 Rate Limit Error]
+    ChatRateResult -->|✅ Yes| ChatProcess[🔄 Process Messages]
+
+    ChatProcess --> ChatModelType{Model Type}
+    ChatModelType -->|Standard| ChatStandard[🤖 Standard AI Processing]
+    ChatModelType -->|GPT-OSS| ChatGPT[🔧 GPT-OSS Processing]
+
+    ChatStandard --> ChatStream[🌊 Streaming Response]
+    ChatGPT --> ChatEmulated[📋 Emulated Stream]
+
+    ChatStream --> ChatSuccess[✅ Chat Response]
+    ChatEmulated --> ChatSuccess
+
+    %% Image Path
+    ImagePath --> ImageValidate[✅ Frontend Validation]
+    ImageValidate --> ImageAPI[📡 POST /api/image]
+
+    ImageAPI --> ImageParse[📋 Parse Request Body]
+    ImageParse --> ImageValidateAPI[✅ Server Validation]
+    ImageValidateAPI --> ImageRateLimit[🚫 Rate Limit Check]
+
+    ImageRateLimit --> ImageRateResult{Rate Limit OK?}
+    ImageRateResult -->|❌ No| ImageRateError[429 Rate Limit Error]
+    ImageRateResult -->|✅ Yes| ImageProcess[🔄 Generate Optimal Payload]
+
+    ImageProcess --> ImageAI[🎨 Cloudflare AI Generation]
+    ImageAI --> ImageFormat{Response Format}
+
+    ImageFormat -->|Base64| ImageBase64[📝 Extract Base64]
+    ImageFormat -->|Binary| ImageBinary[🔄 Convert Stream to Base64]
+
+    ImageBase64 --> ImageSuccess[✅ Image Response]
+    ImageBinary --> ImageSuccess
+
+    %% Error Handling
+    ChatRateError --> FrontendError[🎨 Frontend Error Display]
+    ImageRateError --> FrontendError
+
+    %% Success Responses
+    ChatSuccess --> FrontendSuccess[🎨 Frontend Success Display]
+    ImageSuccess --> FrontendSuccess
+
+    FrontendError --> UserFeedback[👤 User Sees Error]
+    FrontendSuccess --> UserContent[👤 User Sees Content]
 ```
 
 ### Frontend Architecture (`src/app/page.tsx`)
@@ -106,34 +179,113 @@ graph TD
 
 ## Message Flow Architecture
 
+### Chat Request Flow
+
 ```mermaid
 sequenceDiagram
     participant User
     participant UI as Frontend UI
-    participant API as Chat API
-    participant Parser as Reasoning Parser
+    participant ChatAPI as Chat API
+    participant RateLimit as Rate Limiter
     participant AI as Cloudflare AI
+    participant Parser as Reasoning Parser
 
     User->>UI: Type message & select model
-    UI->>UI: Update selectedModelRef
-    UI->>API: POST /api/chat {model, messages, webSearch}
+    UI->>UI: Update selectedModelRef closure
 
-    alt Standard Models
-        API->>AI: streamText() with workers-ai-provider
-        AI-->>API: Streaming tokens
-        API-->>UI: SSE stream with reasoning: true
-    else GPT-OSS Models
-        API->>AI: env.AI.run() direct call
-        AI-->>API: Complete response
-        API-->>UI: Emulated SSE stream
+    Note over UI: Frontend pre-check (optional optimization)
+    UI->>ChatAPI: Pre-check rate limit
+    ChatAPI->>RateLimit: checkRateLimit(request, 'chat')
+    RateLimit-->>ChatAPI: { allowed: false, remaining: 0, resetTime }
+    ChatAPI-->>UI: 429 Rate Limit Exceeded
+    UI->>User: Show rate limit error with countdown
+
+    Note over User: User waits or retries later
+    UI->>ChatAPI: POST /api/chat {model, messages, webSearch}
+
+    Note over ChatAPI: Server-side rate limiting
+    ChatAPI->>RateLimit: checkRateLimit(request, 'chat')
+    alt Rate Limit Exceeded
+        RateLimit-->>ChatAPI: { allowed: false, remaining: 0, resetTime }
+        ChatAPI-->>UI: 429 { error, rateLimit: {type, remaining, resetTime} }
+        UI->>User: Display rate limit banner with reset time
+    else Rate Limit OK
+        RateLimit-->>ChatAPI: { allowed: true, remaining: N }
+
+        Note over ChatAPI: Process request based on model type
+        alt Standard Models (@cf/meta/llama-3.1-8b-instruct, etc.)
+            ChatAPI->>ChatAPI: processMessages() - unify message format
+            ChatAPI->>ChatAPI: createWorkersAI({ binding: env.AI })
+            ChatAPI->>AI: streamText(model, messages, {temperature: 0.7})
+            AI-->>ChatAPI: Streaming tokens with reasoning
+            ChatAPI-->>UI: SSE stream with sendReasoning: true
+        else GPT-OSS Models (@cf/openai/gpt-oss-*)
+            ChatAPI->>ChatAPI: Convert to GPT-OSS format
+            ChatAPI->>AI: env.AI.run(model, {input: conversationText})
+            AI-->>ChatAPI: Complete response
+            ChatAPI->>ChatAPI: extractGptOssResponse()
+            ChatAPI->>ChatAPI: createUIMessageStream() - emulate streaming
+            ChatAPI-->>UI: Emulated SSE stream
+        end
+
+        UI->>Parser: Parse response for thinking tags
+        alt Has <think> or <thinking> tags
+            Parser->>UI: Extract reasoning + clean main content
+            UI->>User: Show collapsible reasoning + main answer
+        else No thinking tags
+            UI->>User: Show main response only
+        end
     end
+```
 
-    UI->>Parser: Parse thinking tags from response
-    alt Has thinking tags
-        Parser->>UI: Extract reasoning + clean text
-        UI->>User: Show collapsible reasoning + main answer
-    else No thinking tags
-        UI->>User: Show main response only
+### Image Generation Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as Frontend UI
+    participant ImageAPI as Image API
+    participant RateLimit as Rate Limiter
+    participant AI as Cloudflare AI
+    participant Gallery as Image Gallery
+
+    User->>UI: Enter prompt & select image model
+    UI->>UI: Update selectedImageModel state
+    UI->>ImageAPI: POST /api/image {prompt, model, steps, guidance, etc.}
+
+    Note over ImageAPI: Validate request
+    ImageAPI->>ImageAPI: Validate prompt (1-2048 chars)
+    ImageAPI->>ImageAPI: Validate model parameters
+
+    Note over ImageAPI: Rate limiting check
+    ImageAPI->>RateLimit: checkRateLimit(request, 'image')
+    alt Rate Limit Exceeded
+        RateLimit-->>ImageAPI: { allowed: false, remaining: 0, resetTime }
+        ImageAPI-->>UI: 429 { error, rateLimit: {type: remaining, resetTime} }
+        UI->>User: Display rate limit error with reset countdown
+    else Rate Limit OK
+        RateLimit-->>ImageAPI: { allowed: true, remaining: N }
+
+        Note over ImageAPI: Generate optimal payload
+        ImageAPI->>ImageAPI: generateOptimalPayload(model, prompt, params)
+        ImageAPI->>ImageAPI: Apply model-specific parameter validation
+
+        alt Image Models with Base64 Output (@cf/black-forest-labs/flux-1-schnell)
+            ImageAPI->>AI: env.AI.run(model, payload)
+            AI-->>ImageAPI: { image: base64_string }
+            ImageAPI->>ImageAPI: Extract base64, set mediaType
+        else Image Models with Binary Output (@cf/stabilityai/stable-diffusion-xl-base-1.0)
+            ImageAPI->>AI: env.AI.run(model, payload)
+            AI-->>ImageAPI: ReadableStream (binary PNG/JPEG)
+            ImageAPI->>ImageAPI: streamToBase64() conversion
+            ImageAPI->>ImageAPI: Determine mediaType from model
+        end
+
+        ImageAPI->>ImageAPI: Convert base64 to Uint8Array
+        ImageAPI-->>UI: {base64, uint8Array, mediaType}
+
+        UI->>Gallery: Add image with metadata {id, prompt, base64}
+        Gallery->>User: Display in responsive grid with actions
     end
 ```
 
@@ -584,36 +736,256 @@ graph TD
   - **ByteDance SDXL**: Fast SDXL variant with reduced steps
   - **Dreamshaper 8 LCM**: Specialized for consistent style generation
 
-## Error Handling & Resilience
+## Rate Limiting & Usage Control
+
+### Rate Limiting Implementation Flow
 
 ```mermaid
 flowchart TD
-    Request[📨 Incoming Request] --> Validate{Validation}
+    Request[📨 Incoming Request] --> Extract[🔍 Extract Client IP]
+    Extract --> GenerateKey[🔑 Generate Rate Limit Key]
 
-    Validate -->|❌ Invalid JSON| JSONError[400: Invalid JSON]
-    Validate -->|❌ Empty messages| MessageError[400: Empty messages]
-    Validate -->|❌ No AI binding| BindingError[500: AI binding unavailable]
-    Validate -->|✅ Valid| ProcessModel[🔄 Process Model]
+    GenerateKey --> CheckConfig{Storage Available?}
 
-    ProcessModel --> ModelType{Model Type}
+    CheckConfig -->|Upstash Configured| UpstashPath[🚀 Upstash Redis Path]
+    CheckConfig -->|KV Only| KVPath[☁️ Cloudflare KV Path]
 
-    ModelType -->|Standard| StandardFlow[📡 Standard Processing]
-    ModelType -->|GPT-OSS| GptFlow[🔧 GPT-OSS Processing]
+    UpstashPath --> UpstashCheck[📊 Check Upstash Counter]
+    UpstashCheck --> UpstashResult{Within Limit?}
 
-    StandardFlow --> StreamError{Stream Error?}
-    GptFlow --> RunError{Run Error?}
+    KVPath --> KVCheck[📊 Check KV Counter]
+    KVCheck --> KVResult{Within Limit?}
 
-    StreamError -->|❌ Error| StandardErrorResp[500: Stream error]
-    StreamError -->|✅ Success| Success[200: Streaming response]
+    UpstashResult -->|✅ Yes| UpstashIncrement[➕ Increment Upstash Counter]
+    UpstashResult -->|❌ No| RateLimited[🚫 Rate Limit Exceeded]
 
-    RunError -->|❌ Error| GptErrorResp[500: GPT-OSS error]
-    RunError -->|✅ Success| Success
+    KVResult -->|✅ Yes| KVIncrement[➕ Increment KV Counter]
+    KVResult -->|❌ No| RateLimited
 
-    JSONError --> ErrorLog[📝 Error logging]
-    MessageError --> ErrorLog
-    BindingError --> ErrorLog
-    StandardErrorResp --> ErrorLog
-    GptErrorResp --> ErrorLog
+    UpstashIncrement --> AllowRequest[✅ Allow Request]
+    KVIncrement --> AllowRequest
+
+    RateLimited --> ErrorResponse[📤 429 Error Response]
+    ErrorResponse --> ErrorData[📋 {error, rateLimit: {type, remaining, resetTime}}]
+
+    AllowRequest --> ProcessAPI[🔄 Continue to API Processing]
+
+    ErrorData --> FrontendError[🎨 Frontend Error Display]
+    FrontendError --> UserFeedback[👤 User Sees Rate Limit Banner]
+```
+
+### Rate Limit Key Generation
+
+```mermaid
+flowchart LR
+    IP[🌐 Client IP] --> Sanitize[🔧 Sanitize IP Address]
+    Type[📝 Request Type] --> TypeString[💬 'chat' or 🖼️ 'image']
+    Date[📅 Current Date] --> DayKey[🗓️ YYYY-MM-DD]
+
+    Sanitize --> Combine[🔗 Combine Components]
+    TypeString --> Combine
+    DayKey --> Combine
+
+    Combine --> FinalKey[🔑 ratelimit:chat:192.168.1.1:2025-01-15]
+
+    FinalKey --> Storage[💾 Store in Redis/KV]
+    Storage --> Expiry[⏰ Set 24h Expiry]
+```
+
+### Daily Reset Mechanism
+
+```mermaid
+flowchart TD
+    UTC[🌍 0:00 UTC Daily] --> NewDay[📅 New Day Started]
+    NewDay --> AutoExpiry[⏰ Previous Day Keys Auto-Expire]
+
+    UserRequest[👤 User Makes Request] --> CheckDate[📅 Check Current Date]
+    CheckDate --> NewKey[🔑 Generate New Day Key]
+    NewKey --> FreshCounter[🔄 Counter Starts at 0]
+
+    AutoExpiry --> CleanSlate[✨ Fresh Rate Limits]
+    FreshCounter --> CleanSlate
+```
+
+### Rate Limiting Implementation
+
+**Rate Limit Configuration:**
+
+```typescript
+export const RATE_LIMITS = {
+  chat: {
+    maxRequests: 20, // 20 chat generations per day
+    windowMs: 24 * 60 * 60 * 1000, // 24 hours
+  },
+  image: {
+    maxRequests: 5, // 5 image generations per day
+    windowMs: 24 * 60 * 60 * 1000, // 24 hours
+  },
+} as const;
+```
+
+**Key Features:**
+
+- **Hybrid Storage**: Upstash Redis (primary) + Cloudflare KV (fallback)
+- **Daily Reset**: Automatic reset at 0:00 UTC every day
+- **IP-based Tracking**: Anonymous rate limiting using client IP addresses
+- **Strong Consistency**: Upstash provides Redis-level consistency vs KV eventual consistency
+- **Automatic Fallback**: Gracefully degrades from Upstash to KV if needed
+- **Global Performance**: Both services have worldwide edge networks
+
+**Rate Limit Utility (`src/utils/rate-limit.ts`):**
+
+```typescript
+// Hybrid implementation: Upstash Redis (primary) + Cloudflare KV (fallback)
+export async function checkRateLimit(
+  request: Request,
+  type: RateLimitType,
+): Promise<{ allowed: boolean; remaining: number; resetTime: number; error?: string }> {
+  // Try Upstash first (if configured)
+  const { env } = getCloudflareContext();
+  if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
+    return checkRateLimitUpstash(request, type);
+  }
+
+  // Fallback to Cloudflare KV
+  return checkRateLimitKV(request, type);
+}
+```
+
+**Upstash Configuration:**
+
+```bash
+# Set Upstash secrets (optional - KV fallback if not configured)
+wrangler secret put UPSTASH_REDIS_REST_URL
+wrangler secret put UPSTASH_REDIS_REST_TOKEN
+```
+
+**Benefits of Hybrid Approach:**
+
+- **Production Scale**: Upstash Redis for high-traffic consistency
+- **Reliability**: Cloudflare KV fallback prevents service disruption
+- **Cost Optimization**: Use Upstash only when needed
+- **Zero Configuration**: Works out-of-the-box with KV, enhanced with Upstash
+
+**Frontend Error Handling:**
+
+```typescript
+// Rate limit error state management
+const [rateLimitError, setRateLimitError] = useState<{
+  message: string;
+  type: 'chat' | 'image';
+  remaining: number;
+  resetTime: number;
+} | null>(null);
+
+// Display with countdown timer
+{rateLimitError && (
+  <div className="rate-limit-banner">
+    <p>{rateLimitError.message}</p>
+    <p>Resets in {formatResetTime(rateLimitError.resetTime)}</p>
+  </div>
+)}
+```
+
+## Error Handling & Resilience
+
+### Complete Error Handling Flow
+
+```mermaid
+flowchart TD
+    Request[📨 API Request] --> ParseBody{Parse JSON Body}
+
+    ParseBody -->|❌ Invalid JSON| JSONError[400: Invalid JSON in request body]
+    ParseBody -->|✅ Valid| ValidateData{Validate Request Data}
+
+    ValidateData -->|❌ No messages| MessageError[400: Missing or empty messages array]
+    ValidateData -->|❌ Invalid prompt| PromptError[400: Prompt validation failed]
+    ValidateData -->|✅ Valid| CheckBinding{AI Binding Available?}
+
+    CheckBinding -->|❌ No| BindingError[500: AI binding is not configured]
+    CheckBinding -->|✅ Yes| RateLimit[🔍 Check Rate Limit]
+
+    RateLimit --> RateLimitResult{Rate Limit Status}
+    RateLimitResult -->|❌ Exceeded| RateLimitError[429: Rate limit exceeded with reset time]
+    RateLimitResult -->|✅ OK| ProcessRequest[🔄 Process Request]
+
+    ProcessRequest --> DetermineFlow{Request Type}
+
+    DetermineFlow -->|💬 Chat| ChatFlow[📡 Chat Processing]
+    DetermineFlow -->|🖼️ Image| ImageFlow[🎨 Image Processing]
+
+    ChatFlow --> ModelCheck{Model Type}
+    ModelCheck -->|Standard| StandardModel[🤖 Standard AI Models]
+    ModelCheck -->|GPT-OSS| GptOssModel[🔧 GPT-OSS Models]
+
+    StandardModel --> StreamText[🌊 streamText() call]
+    StreamText --> StreamResult{Stream Success?}
+    StreamResult -->|❌ Error| StreamError[500: AI processing error]
+    StreamResult -->|✅ Success| StreamResponse[📤 Streaming Response]
+
+    GptOssModel --> DirectRun[🎯 env.AI.run() call]
+    DirectRun --> RunResult{Run Success?}
+    RunResult -->|❌ Error| GptError[500: GPT-OSS model error]
+    RunResult -->|✅ Success| EmulatedStream[📤 Emulated Streaming Response]
+
+    ImageFlow --> ValidateImage{Validate Image Params}
+    ValidateImage -->|❌ Invalid| ImageParamError[400: Invalid image parameters]
+    ValidateImage -->|✅ Valid| GenerateImage[🎨 Generate Image]
+
+    GenerateImage --> ImageResult{Generation Success?}
+    ImageResult -->|❌ Error| ImageError[500: Image generation error]
+    ImageResult -->|✅ Success| ImageResponse[📤 Image Response]
+
+    %% Error Responses
+    JSONError --> LogError[📝 Log Error]
+    MessageError --> LogError
+    PromptError --> LogError
+    BindingError --> LogError
+    StreamError --> LogError
+    GptError --> LogError
+    ImageParamError --> LogError
+    ImageError --> LogError
+
+    RateLimitError --> LogRateLimit[📊 Log Rate Limit Event]
+
+    %% Success Responses
+    StreamResponse --> Success[✅ Success]
+    EmulatedStream --> Success
+    ImageResponse --> Success
+
+    LogError --> FrontendError[🎨 Frontend Error Display]
+    LogRateLimit --> FrontendRateLimit[🎨 Frontend Rate Limit Banner]
+    Success --> UserExperience[👤 User Sees Response]
+```
+
+### Frontend Error Handling Flow
+
+```mermaid
+flowchart TD
+    APIResponse[📨 API Response] --> StatusCheck{Response Status}
+
+    StatusCheck -->|429| RateLimitPath[🚫 Rate Limit Error]
+    StatusCheck -->|400| ValidationPath[⚠️ Validation Error]
+    StatusCheck -->|500| ServerPath[❌ Server Error]
+    StatusCheck -->|200| SuccessPath[✅ Success Response]
+
+    RateLimitPath --> ParseRateLimit[📋 Parse Rate Limit Data]
+    ParseRateLimit --> RateLimitState[💾 Set Rate Limit State]
+    RateLimitState --> RateLimitBanner[🎨 Show Rate Limit Banner]
+    RateLimitBanner --> CountdownTimer[⏰ Show Reset Countdown]
+
+    ValidationPath --> ValidationMessage[📝 Show Validation Error]
+    ValidationMessage --> UserAction[👤 User Corrects Input]
+
+    ServerPath --> ServerMessage[📝 Show Server Error]
+    ServerMessage --> RetryOption[🔄 Offer Retry Option]
+
+    SuccessPath --> DisplayResponse[🎨 Display AI Response]
+    DisplayResponse --> ParseReasoning[🧠 Parse Reasoning Tags]
+    ParseReasoning --> ShowContent[📺 Show Content to User]
+
+    CountdownTimer --> AutoClearAfter10s[⏱️ Auto-clear after 10s]
+    AutoClearAfter10s --> ClearBanner[🗑️ Clear Error Banner]
 ```
 
 ## Deployment & Operations
