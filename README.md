@@ -3,8 +3,6 @@
   <h1 style="margin-bottom: 0;">OpenGPT</h1>
   <p style="margin-top: 4px;">Experiment with open-source AI models</p>
 
----
-
 [![Next.js](https://img.shields.io/badge/Next.js-15.4.6-black?style=flat-square&logo=next.js)](https://nextjs.org/) [![React](https://img.shields.io/badge/React-19.1.0-61DAFB?style=flat-square&logo=react)](https://reactjs.org/) [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript)](https://www.typescriptlang.org/) [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?style=flat-square&logo=cloudflare)](https://workers.cloudflare.com/) [![AI SDK](https://img.shields.io/badge/AI_SDK-5.0.34-FF6154?style=flat-square&logo=vercel)](https://sdk.vercel.ai/) [![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.x-06B6D4?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/) [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
 <br />
@@ -12,8 +10,6 @@
 A modern AI playground that combines the **development experience of Next.js** with the **performance of Cloudflare Workers**. Experiment with 50+ open-source AI models, including GPT-OSS, Leonardo, Llama, Qwen, Gemini, and more.
 
 </div>
-
----
 
 ## **Why OpenGPT?**
 
@@ -59,8 +55,6 @@ OpenGPT leverages three core technologies to deliver an exceptional AI developme
 
 - **Type Safety**: Full TypeScript with Cloudflare bindings
 - **One-Command Deploy**: `pnpm deploy` to Cloudflare Workers globally
-
----
 
 ## 🚀 **Getting Started**
 
@@ -108,8 +102,6 @@ wrangler secret put NEXTJS_ENV
 | `pnpm format`     | Format code with Prettier                       |
 | `pnpm cf-typegen` | Generate Cloudflare binding types               |
 
----
-
 ## 🤖 **Supported AI Models**
 
 ### Text Generation (50+ Models)
@@ -128,8 +120,6 @@ wrangler secret put NEXTJS_ENV
 - **Leonardo AI**: Lucid Origin and Phoenix 1.0
 - **Stability AI**: Stable Diffusion XL Base 1.0
 - **ByteDance**: Stable Diffusion XL Lightning (ultra-fast generation)
-
----
 
 ## 🏗️ **Architecture**
 
@@ -212,8 +202,6 @@ npx wrangler deploy
 | `UPSTASH_REDIS_REST_URL`   | Upstash Redis URL (optional)   |
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis token (optional) |
 
----
-
 ### Adding New Models
 
 1. **Add model to constants**:
@@ -284,8 +272,6 @@ git push origin feature/new-feature
 ## 📄 **License**
 
 This project is licensed under the MIT License.
-
----
 
 <div align="center">
 
