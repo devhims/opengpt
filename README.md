@@ -1,4 +1,4 @@
-# AI Lab
+# AiX
 
 Next.js 15 App Router + React 19 + Tailwind CSS 4, built for Cloudflare Workers using OpenNext. Local development uses `next dev` with Cloudflare helpers; production is bundled to a Worker via `@opennextjs/cloudflare`.
 

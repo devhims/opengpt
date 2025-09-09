@@ -27,3 +27,12 @@ export {
 export function getAvailableModels(): readonly CloudflareAIModel[] {
   return CLOUDFLARE_AI_MODELS.textGeneration;
 }
+
+// Image Generation Types
+export interface GeneratedImage {
+  id: string;
+  prompt: string;
+  base64: string;
+  mediaType: string;
+  uint8Array: number[];
+}

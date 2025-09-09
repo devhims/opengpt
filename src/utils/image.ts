@@ -1,11 +1,10 @@
-import type { ImageGenerationResponse } from '@/app/api/image/route';
+import type { ImageGenerationRequest, ImageGenerationResponse } from '@/app/api/image/route';
+import type { GeneratedImage } from '@/types';
 
 /**
  * Download generated image
  */
-export async function downloadImage(
-  image: ImageGenerationResponse & { id: string; prompt: string },
-): Promise<void> {
+export async function downloadImage(image: GeneratedImage): Promise<void> {
   try {
     // Convert base64 to blob
     const response = await fetch(`data:${image.mediaType};base64,${image.base64}`);
@@ -35,7 +34,7 @@ export async function downloadImage(
 export async function generateImage(
   prompt: string,
   model: string,
-  steps: number = 4,
+  params: Partial<ImageGenerationRequest> = {},
 ): Promise<ImageGenerationResponse> {
   const response = await fetch('/api/image', {
     method: 'POST',
@@ -45,7 +44,7 @@ export async function generateImage(
     body: JSON.stringify({
       prompt,
       model,
-      steps,
+      ...params,
     }),
   });
 

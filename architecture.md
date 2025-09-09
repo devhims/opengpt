@@ -1,4 +1,4 @@
-# AI Lab Application Architecture
+# AiX Application Architecture
 
 ## Overview
 

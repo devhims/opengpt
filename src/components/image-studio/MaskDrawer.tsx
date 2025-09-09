@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 
 interface MaskDrawerProps {
@@ -12,7 +12,14 @@ interface MaskDrawerProps {
   onMaskChange: (mask: number[] | undefined) => void; // 0..255 array or undefined when cleared
 }
 
-export function MaskDrawer({ imageDataUrl, width, height, brushSize = 40, onBrushSizeChange, onMaskChange }: MaskDrawerProps) {
+export function MaskDrawer({
+  imageDataUrl,
+  width,
+  height,
+  brushSize = 40,
+  onBrushSizeChange,
+  onMaskChange,
+}: MaskDrawerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -75,7 +82,7 @@ export function MaskDrawer({ imageDataUrl, width, height, brushSize = 40, onBrus
       <div className="flex items-center justify-between">
         <div className="text-sm font-medium">Mask (draw)</div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="text-muted-foreground flex items-center gap-2 text-xs">
             <span>Brush</span>
             <input
               type="range"
@@ -117,7 +124,7 @@ export function MaskDrawer({ imageDataUrl, width, height, brushSize = 40, onBrus
           ref={canvasRef}
           width={width}
           height={height}
-          className="absolute inset-0 h-full w-full touch-none cursor-crosshair opacity-70"
+          className="absolute inset-0 h-full w-full cursor-crosshair touch-none opacity-70"
           onPointerDown={(e) => {
             setIsDrawing(true);
             (e.currentTarget as HTMLCanvasElement).setPointerCapture(e.pointerId);
@@ -133,10 +140,9 @@ export function MaskDrawer({ imageDataUrl, width, height, brushSize = 40, onBrus
           onPointerLeave={() => setIsDrawing(false)}
         />
       </div>
-      <p className="text-xs text-muted-foreground">
-        White = inpaint/fill, black = keep original. Click "Use mask" to apply.
+      <p className="text-muted-foreground text-xs">
+        White = inpaint/fill, black = keep original. Click &ldquo;Use mask&rdquo; to apply.
       </p>
     </div>
   );
 }
-

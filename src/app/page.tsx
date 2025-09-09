@@ -4,20 +4,21 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import type { StickToBottomContext } from 'use-stick-to-bottom';
-import type { ImageGenerationResponse } from '@/app/api/image/route';
+import type { GeneratedImage } from '@/types';
 
 // Utils
 import { getProviderLabel } from '@/utils/chat';
 import { copyToClipboard } from '@/utils/clipboard';
 import { downloadImage, generateImage } from '@/utils/image';
 import { getFormattedTextModels, getFormattedImageModels } from '@/utils/models';
+import { getModelSchema, type ImageModelId } from '@/schemas/image-models';
 
 // Components
 import { ChatHeader } from '@/components/pages/chat-header';
 import { ChatView } from '@/components/pages/chat-view';
 import { ImageView } from '@/components/pages/image-view';
 import { ChatInput } from '@/components/pages/chat-input';
-import { ModelTester } from '@/components/pages/model-tester';
+import { ImageInput } from '@/components/pages/image-input';
 
 export default function ChatPage() {
   const models = getFormattedTextModels();
@@ -27,31 +28,62 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [selectedModel, setSelectedModel] = useState<string>(models[0].value);
   const [selectedImageModel, setSelectedImageModel] = useState<string>(imageModels[0].value);
-  const [webSearch, setWebSearch] = useState(false);
   const [copiedStates, setCopiedStates] = useState<Map<string, boolean>>(new Map());
   const stickContextRef = useRef<StickToBottomContext | null>(null);
 
   // Image generation states
-  const [generatedImages, setGeneratedImages] = useState<
-    Array<ImageGenerationResponse & { id: string; prompt: string }>
-  >([]);
+  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
+  const [, setGeneratingImageId] = useState<string | null>(null);
 
-  // Model tester state
-  const [showModelTester, setShowModelTester] = useState(false);
+  // Helper function to get default parameters for the selected image model
+  const getDefaultImageParams = (modelId: string) => {
+    try {
+      const schema = getModelSchema(modelId as ImageModelId);
+      const defaultParams = schema.defaultParams;
 
-  // Use ref to avoid closure issues with selectedModel and webSearch
+      // Normalize parameter names and ensure required fields are present
+      return {
+        prompt: '',
+        steps: (defaultParams.steps as number) || (defaultParams.num_steps as number) || 4,
+        guidance: (defaultParams.guidance as number) || 7.5,
+        width: (defaultParams.width as number) || 1024,
+        height: (defaultParams.height as number) || 1024,
+        negative_prompt: (defaultParams.negative_prompt as string) || '',
+      };
+    } catch {
+      // Fallback to hardcoded defaults if model schema is not found
+      console.warn(`Model schema not found for ${modelId}, using fallback defaults`);
+      return {
+        prompt: '',
+        steps: 4,
+        guidance: 7.5,
+        width: 1024,
+        height: 1024,
+        negative_prompt: '',
+      };
+    }
+  };
+
+  // Image generation parameters state - dynamically initialized based on selected model
+  const [imageParams, setImageParams] = useState(() => getDefaultImageParams(imageModels[0].value));
+
+  // Use ref to avoid closure issues with selectedModel
   const selectedModelRef = useRef(selectedModel);
-  const webSearchRef = useRef(webSearch);
 
   useEffect(() => {
     selectedModelRef.current = selectedModel;
   }, [selectedModel]);
 
+  // Update image parameters when selected model changes
   useEffect(() => {
-    webSearchRef.current = webSearch;
-  }, [webSearch]);
+    const newDefaults = getDefaultImageParams(selectedImageModel);
+    setImageParams((prev) => ({
+      ...newDefaults,
+      // Preserve user-entered prompt and any custom values
+      prompt: prev.prompt,
+    }));
+  }, [selectedImageModel]);
 
   const { messages, sendMessage, status, regenerate } = useChat({
     transport: new DefaultChatTransport({
@@ -61,7 +93,6 @@ export default function ChatPage() {
         body: {
           messages,
           model: selectedModelRef.current,
-          webSearch: webSearchRef.current,
           ...body,
         },
       }),
@@ -99,22 +130,26 @@ export default function ChatPage() {
     copyToClipboard(text, messageId, setCopiedStates);
   };
 
-  const handleDownload = (image: ImageGenerationResponse & { id: string; prompt: string }) => {
+  const handleDownload = (image: GeneratedImage) => {
     downloadImage(image);
+  };
+
+  const handleImageParamsChange = (patch: Partial<typeof imageParams>) => {
+    setImageParams((prev) => ({ ...prev, ...patch }));
   };
 
   const handleImageGeneration = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!imageParams.prompt?.trim()) return;
 
-    const prompt = input.trim();
+    const prompt = imageParams.prompt.trim();
     const imageId = Date.now().toString();
-    setInput('');
+    setImageParams((prev) => ({ ...prev, prompt: '' }));
     setIsGeneratingImage(true);
     setGeneratingImageId(imageId);
 
     // Add placeholder image while generating
-    const placeholderImage: ImageGenerationResponse & { id: string; prompt: string } = {
+    const placeholderImage: GeneratedImage = {
       id: imageId,
       base64: '',
       uint8Array: [],
@@ -124,7 +159,7 @@ export default function ChatPage() {
     setGeneratedImages((prev) => [placeholderImage, ...prev]);
 
     try {
-      const imageData = await generateImage(prompt, selectedImageModel, 4);
+      const imageData = await generateImage(prompt, selectedImageModel, imageParams);
       const newImage = {
         ...imageData,
         id: imageId,
@@ -145,53 +180,49 @@ export default function ChatPage() {
 
   return (
     <div className="bg-background flex h-dvh flex-col">
-      <ChatHeader
-        mode={mode}
-        setMode={setMode}
-        providerLabel={providerLabel}
-        onOpenTester={() => setShowModelTester(true)}
-      />
+      <ChatHeader mode={mode} setMode={setMode} providerLabel={providerLabel} />
 
       <div className="flex min-h-0 flex-1 flex-col">
         {mode === 'chat' ? (
-          <ChatView
-            messages={messages}
-            status={status}
-            copiedStates={copiedStates}
-            stickContextRef={stickContextRef}
-            onCopy={handleCopy}
-            onRegenerate={regenerate}
-          />
+          <>
+            <ChatView
+              messages={messages}
+              status={status}
+              copiedStates={copiedStates}
+              stickContextRef={stickContextRef}
+              onCopy={handleCopy}
+              onRegenerate={regenerate}
+            />
+            <ChatInput
+              input={input}
+              setInput={setInput}
+              selectedModel={selectedModel}
+              setSelectedModel={setSelectedModel}
+              models={models}
+              status={status}
+              onSubmit={handleSubmit}
+            />
+          </>
         ) : (
-          <ImageView
-            generatedImages={generatedImages}
-            isGeneratingImage={isGeneratingImage}
-            copiedStates={copiedStates}
-            onCopy={handleCopy}
-            onDownload={handleDownload}
-          />
+          <>
+            <ImageView
+              generatedImages={generatedImages}
+              isGeneratingImage={isGeneratingImage}
+              copiedStates={copiedStates}
+              onCopy={handleCopy}
+              onDownload={handleDownload}
+            />
+            <ImageInput
+              imageParams={imageParams}
+              selectedImageModel={selectedImageModel}
+              setSelectedImageModel={setSelectedImageModel}
+              onParamsChange={handleImageParamsChange}
+              onSubmit={handleImageGeneration}
+              isGenerating={isGeneratingImage}
+            />
+          </>
         )}
       </div>
-
-      <ChatInput
-        mode={mode}
-        input={input}
-        setInput={setInput}
-        webSearch={webSearch}
-        setWebSearch={setWebSearch}
-        selectedModel={selectedModel}
-        selectedImageModel={selectedImageModel}
-        setSelectedModel={setSelectedModel}
-        setSelectedImageModel={setSelectedImageModel}
-        models={models}
-        imageModels={imageModels}
-        status={status}
-        generatingImageId={generatingImageId}
-        onSubmit={handleSubmit}
-        onImageGeneration={handleImageGeneration}
-      />
-
-      {showModelTester && <ModelTester onClose={() => setShowModelTester(false)} />}
     </div>
   );
 }

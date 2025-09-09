@@ -91,7 +91,7 @@ export interface ImageModelSchema {
   isPartner: boolean;
   isBeta?: boolean;
   capabilities: readonly ModelCapability[];
-  defaultParams: Record<string, any>;
+  defaultParams: Record<string, unknown>;
   paramRanges?: Record<string, ParameterRange>;
   outputFormat: OutputFormat;
   /** Optimal performance configuration */
@@ -120,7 +120,7 @@ export const IMAGE_MODEL_SCHEMAS = {
       guidance: 4.5,
       height: 1120,
       width: 1120,
-      steps: 4,
+      steps: 25,
     },
     paramRanges: {
       guidance: { min: 0, max: 10 },
@@ -177,7 +177,7 @@ export const IMAGE_MODEL_SCHEMAS = {
     isPartner: false,
     capabilities: ['text-to-image', 'fast-generation', 'high-resolution'] as const,
     defaultParams: {
-      steps: 4,
+      steps: 8,
     },
     paramRanges: {
       steps: { min: 1, max: 8 },
@@ -333,8 +333,8 @@ export function getModelSchema(modelId: ImageModelId): ImageModelSchema {
  */
 export function getOptimalParams(
   modelId: ImageModelId,
-  customParams: Partial<BaseImageInputParams & Record<string, any>> = {},
-): Record<string, any> {
+  customParams: Partial<BaseImageInputParams & Record<string, unknown>> = {},
+): Record<string, unknown> {
   const schema = getModelSchema(modelId);
   return {
     ...schema.defaultParams,
@@ -362,7 +362,7 @@ export function isBetaModel(modelId: ImageModelId): boolean {
  */
 export function getModelsByCapability(capability: ModelCapability): ImageModelId[] {
   return Object.entries(IMAGE_MODEL_SCHEMAS)
-    .filter(([_, schema]) =>
+    .filter(([, schema]) =>
       (schema.capabilities as readonly ModelCapability[]).includes(capability),
     )
     .map(([modelId]) => modelId as ImageModelId);

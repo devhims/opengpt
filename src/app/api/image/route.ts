@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
-import {
-  IMAGE_MODEL_SCHEMAS,
-  getOptimalParams,
-  type ImageModelId,
-  type ModelCapability,
-} from '@/schemas/image-models';
+import { IMAGE_MODEL_SCHEMAS, getOptimalParams, type ImageModelId } from '@/schemas/image-models';
 
 export interface ImageGenerationRequest {
   prompt: string;
@@ -37,7 +32,7 @@ function generateOptimalPayload(
   model: string,
   prompt: string,
   userParams: Partial<ImageGenerationRequest>,
-): Record<string, any> {
+): Record<string, unknown> {
   const modelId = model as ImageModelId;
   const schema = IMAGE_MODEL_SCHEMAS[modelId];
 
@@ -54,7 +49,7 @@ function generateOptimalPayload(
   const optimalParams = getOptimalParams(modelId, { prompt: prompt.trim() });
 
   // Override with user parameters where provided and valid
-  const payload: Record<string, any> = { ...optimalParams };
+  const payload: Record<string, unknown> = { ...optimalParams };
 
   // Apply user overrides with validation
   if (userParams.seed && userParams.seed > 0) {
@@ -70,8 +65,8 @@ function generateOptimalPayload(
     const stepRange = schema.paramRanges?.[stepParam as keyof typeof schema.paramRanges];
 
     if (stepRange && typeof stepRange === 'object' && 'min' in stepRange && 'max' in stepRange) {
-      const min = (stepRange as any).min || 1;
-      const max = (stepRange as any).max || 50;
+      const min = (stepRange as { min?: number }).min || 1;
+      const max = (stepRange as { max?: number }).max || 50;
       payload[stepParam] = Math.max(min, Math.min(max, userParams.steps));
     } else {
       payload[stepParam] = userParams.steps;
@@ -234,13 +229,13 @@ export async function POST(request: NextRequest) {
     const schema = IMAGE_MODEL_SCHEMAS[model as ImageModelId];
     const isInpainting = schema?.capabilities?.some((cap) => cap === 'inpainting');
     const hasInputImage =
-      typeof (requestPayload as any).image_b64 === 'string' ||
-      Array.isArray((requestPayload as any).image);
+      typeof (requestPayload as Record<string, unknown>).image_b64 === 'string' ||
+      Array.isArray((requestPayload as Record<string, unknown>).image);
 
     if (isInpainting) {
       const hasMask =
-        Array.isArray((requestPayload as any).mask) ||
-        typeof (userParams as any).mask_b64 === 'string';
+        Array.isArray((requestPayload as Record<string, unknown>).mask) ||
+        typeof (userParams as Record<string, unknown>).mask_b64 === 'string';
       const hasImage = hasInputImage;
 
       // Only require mask if this is specifically an inpainting operation (mask provided)
@@ -253,15 +248,17 @@ export async function POST(request: NextRequest) {
       }
 
       // Some bindings expect `mask_image`; include both for compatibility when mask is provided
-      if ((requestPayload as any).mask && !(requestPayload as any).mask_image) {
-        (requestPayload as any).mask_image = (requestPayload as any).mask;
+      const payloadTyped = requestPayload as Record<string, unknown>;
+      if (payloadTyped.mask && !payloadTyped.mask_image) {
+        payloadTyped.mask_image = payloadTyped.mask;
       }
     }
 
     // For img2img / inpainting, prefer letting the model infer dimensions from the input image
     if (hasInputImage) {
-      delete (requestPayload as any).width;
-      delete (requestPayload as any).height;
+      const payloadTyped = requestPayload as Record<string, unknown>;
+      delete payloadTyped.width;
+      delete payloadTyped.height;
     }
 
     console.log(`🎨 Generating image with ${model}:`, requestPayload);
