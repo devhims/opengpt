@@ -1,16 +1,7 @@
 <div align="center">
 
-  <h1 style="margin-bottom: 0;">
-    <table style="display: inline-table; border: none;">
-      <tr>
-        <td style="vertical-align: middle; padding: 0; border: none;">
-          <img src="public/favicon.png" alt="OpenGPT" style="width: 48px; height: 48px;">
-        </td>
-        <td style="vertical-align: middle; padding-left: 12px; border: none;">
-          OpenGPT
-        </td>
-      </tr>
-    </table>
+  <h1>
+    <img src="public/favicon.png" alt="OpenGPT" width="64" height="64" align="absmiddle"> OpenGPT
   </h1>
   <p style="margin-top: 4px;">Experiment with open-source AI models</p>
 
