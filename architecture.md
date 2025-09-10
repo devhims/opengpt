@@ -133,18 +133,26 @@ flowchart TD
 **Chat API (`src/app/api/chat/route.ts`):**
 
 - **Runtime**: Cloudflare Workers via OpenNext
-- **AI Integration**: AI SDK v5 with `workers-ai-provider`
-- **Dual API Handling**: Different pathways for GPT-OSS vs standard models
-- **Reasoning Support**: Enhanced prompting for thinking process extraction
-- **Error Handling**: Comprehensive error recovery and logging
+- **AI Integration**:
+  - **Standard Models**: AI SDK v5 with `workers-ai-provider` wrapper for streaming support
+  - **GPT-OSS Models**: Direct `env.AI.run` calls with emulated streaming via `createUIMessageStream`
+  - **Backend**: All models connect to Cloudflare Workers AI
+- **Dual Processing Pathways**: Optimized handling for different model types
+- **Reasoning Support**: Enhanced prompting + reasoning token parsing with `sendReasoning: true`
+- **Message Processing**: Unified `processMessages()` function for AI SDK v5 compatibility
+- **Error Handling**: Comprehensive error recovery, logging, and rate limiting
 
 **Image API (`src/app/api/image/route.ts`):**
 
-- **Runtime**: Cloudflare Workers Runtime
-- **AI Integration**: Direct Cloudflare Workers AI binding (`env.AI.run`)
-- **Model Support**: FLUX-1-Schnell and Stable Diffusion models
-- **Output Format**: Base64 encoded images with Uint8Array support
-- **Parameter Validation**: Prompt length, steps, and seed validation
+- **Runtime**: Cloudflare Workers Runtime via OpenNext
+- **AI Integration**: Direct Cloudflare Workers AI binding (`env.AI.run`) for all image models
+- **Model Support**: FLUX-1-Schnell, Stable Diffusion XL, Lightning models, and inpainting variants
+- **Response Processing**:
+  - **Base64 Models**: Extract `response.image` directly (FLUX-1-Schnell, Lucid Origin)
+  - **Binary Models**: Convert ReadableStream to base64 via `streamToBase64()` (SDXL, Lightning)
+- **Output Format**: Dual format support (base64 + Uint8Array) for frontend compatibility
+- **Parameter Optimization**: Model-specific parameter validation and optimal payload generation
+- **Advanced Features**: Img2img, inpainting, and mask support with proper validation
 
 ## Component Architecture
 
@@ -217,11 +225,13 @@ sequenceDiagram
             ChatAPI->>ChatAPI: processMessages() - unify message format
             ChatAPI->>ChatAPI: createWorkersAI({ binding: env.AI })
             ChatAPI->>AI: streamText(model, messages, {temperature: 0.7})
+            Note over AI: Cloudflare Workers AI
             AI-->>ChatAPI: Streaming tokens with reasoning
             ChatAPI-->>UI: SSE stream with sendReasoning: true
         else GPT-OSS Models (@cf/openai/gpt-oss-*)
             ChatAPI->>ChatAPI: Convert to GPT-OSS format
             ChatAPI->>AI: env.AI.run(model, {input: conversationText})
+            Note over AI: Cloudflare Workers AI
             AI-->>ChatAPI: Complete response
             ChatAPI->>ChatAPI: extractGptOssResponse()
             ChatAPI->>ChatAPI: createUIMessageStream() - emulate streaming
@@ -272,10 +282,12 @@ sequenceDiagram
 
         alt Image Models with Base64 Output (@cf/black-forest-labs/flux-1-schnell)
             ImageAPI->>AI: env.AI.run(model, payload)
+            Note over AI: Cloudflare Workers AI
             AI-->>ImageAPI: { image: base64_string }
             ImageAPI->>ImageAPI: Extract base64, set mediaType
         else Image Models with Binary Output (@cf/stabilityai/stable-diffusion-xl-base-1.0)
             ImageAPI->>AI: env.AI.run(model, payload)
+            Note over AI: Cloudflare Workers AI
             AI-->>ImageAPI: ReadableStream (binary PNG/JPEG)
             ImageAPI->>ImageAPI: streamToBase64() conversion
             ImageAPI->>ImageAPI: Determine mediaType from model

@@ -151,11 +151,18 @@ flowchart TD
     RateCheck2 -->|✅| ImageProcessing[🎨 Image Processing]
 
     ChatProcessing --> ModelType{Model Type}
-    ModelType -->|Standard| Streaming[🌊 Real-time Streaming]
-    ModelType -->|GPT-OSS| Batch[📋 Batch Processing]
+    ModelType -->|Standard| AISDKPath[🔧 AI SDK v5 + workers-ai-provider]
+    ModelType -->|GPT-OSS| DirectPath[🎯 Direct env.AI.run]
 
-    ImageProcessing --> ImageAI[🎨 Cloudflare AI]
-    ImageAI --> ImageResponse[📸 Generated Image]
+    ImageProcessing --> ImageAI[🎨 Direct env.AI.run]
+
+    AISDKPath --> WorkersAI1[☁️ Cloudflare Workers AI]
+    DirectPath --> WorkersAI2[☁️ Cloudflare Workers AI]
+    ImageAI --> WorkersAI3[☁️ Cloudflare Workers AI]
+
+    WorkersAI1 --> Streaming[🌊 Real-time Streaming]
+    WorkersAI2 --> Batch[📋 Batch Processing + Emulated Stream]
+    WorkersAI3 --> ImageResponse[📸 Generated Image]
 
     Streaming --> ParseReasoning[🧠 Parse Reasoning]
     Batch --> ParseReasoning
@@ -169,6 +176,100 @@ flowchart TD
     ChatSuccess --> ResponseUI[📥 Response Display]
     ImageSuccess --> ResponseUI
 ```
+
+## 🌊 **Request Flow Architecture**
+
+Detailed end-to-end request processing from user interaction to AI generation:
+
+```mermaid
+flowchart TD
+    Start[👤 User Input] --> InputType{Input Type}
+
+    %% Chat Path
+    InputType -->|💬 Chat Message| ChatUI[🎨 Chat UI Processing]
+    ChatUI --> ChatValidate[✅ Validate Message]
+    ChatValidate --> ChatRequest[📡 POST /api/chat]
+
+    ChatRequest --> ChatParse[📋 Parse Request Body]
+    ChatParse --> ChatRateLimit["🚫 checkRateLimit req chat"]
+    ChatRateLimit --> ChatRateCheck{Rate Limit OK?}
+
+    ChatRateCheck -->|❌ No| ChatRateError[429: Rate Limit Exceeded]
+    ChatRateCheck -->|✅ Yes| ChatModelCheck{Model Type}
+
+    %% Chat - Standard Models Path
+    ChatModelCheck -->|Standard Models| ChatStandard["🔧 processMessages"]
+    ChatStandard --> ChatWorkersAI["🤖 createWorkersAI binding env.AI"]
+    ChatWorkersAI --> ChatStreamText["🌊 streamText model messages"]
+    ChatStreamText --> ChatWorkers1[☁️ Cloudflare Workers AI]
+    ChatWorkers1 --> ChatStream[📤 Real-time SSE Stream]
+
+    %% Chat - GPT-OSS Models Path
+    ChatModelCheck -->|GPT-OSS Models| ChatGPT["🎯 handleGptOssModel"]
+    ChatGPT --> ChatDirectRun["📡 env.AI.run model input"]
+    ChatDirectRun --> ChatWorkers2[☁️ Cloudflare Workers AI]
+    ChatWorkers2 --> ChatExtract["📋 extractGptOssResponse"]
+    ChatExtract --> ChatEmulated["🌊 createUIMessageStream"]
+
+    %% Image Path
+    InputType -->|🖼️ Image Prompt| ImageUI[🎨 Image UI Processing]
+    ImageUI --> ImageValidate[✅ Validate Prompt & Params]
+    ImageValidate --> ImageRequest[📡 POST /api/image]
+
+    ImageRequest --> ImageParse[📋 Parse Request Body]
+    ImageParse --> ImageRateLimit2["🚫 checkRateLimit req image"]
+    ImageRateLimit2 --> ImageRateCheck{Rate Limit OK?}
+
+    ImageRateCheck -->|❌ No| ImageRateError[429: Rate Limit Exceeded]
+    ImageRateCheck -->|✅ Yes| ImageOptimal["🔧 generateOptimalPayload"]
+    ImageOptimal --> ImageDirectRun2["📡 env.AI.run model payload"]
+    ImageDirectRun2 --> ImageWorkers[☁️ Cloudflare Workers AI]
+
+    %% Image Response Processing
+    ImageWorkers --> ImageFormat{Response Format}
+    ImageFormat -->|Base64| ImageBase64[📝 Extract response.image]
+    ImageFormat -->|Binary Stream| ImageBinary["🔄 streamToBase64"]
+    ImageBase64 --> ImageConvert[🔢 Convert to Uint8Array]
+    ImageBinary --> ImageConvert
+
+    %% Success Responses
+    ChatStream --> ChatReasoning[🧠 Parse Reasoning Tokens]
+    ChatEmulated --> ChatReasoning
+    ChatReasoning --> ChatSuccess[✅ Chat Response with Reasoning]
+
+    ImageConvert --> ImageSuccess[✅ Image Response with Metadata]
+
+    %% Error Handling
+    ChatRateError --> ErrorDisplay[🎨 Rate Limit Banner]
+    ImageRateError --> ErrorDisplay
+
+    %% Final Display
+    ChatSuccess --> FinalDisplay[📱 Frontend Display]
+    ImageSuccess --> FinalDisplay
+    ErrorDisplay --> FinalDisplay
+
+    FinalDisplay --> UserExperience[👤 User Sees Result]
+```
+
+### Key Implementation Details
+
+**Chat Route Processing:**
+
+- **Standard Models**: Uses AI SDK v5 with `workers-ai-provider` wrapper for streaming
+- **GPT-OSS Models**: Direct `env.AI.run` call with emulated streaming via `createUIMessageStream`
+- **All models**: Connect to the same Cloudflare Workers AI backend
+
+**Image Route Processing:**
+
+- **All Image Models**: Direct `env.AI.run` call (no AI SDK wrapper needed)
+- **Response Handling**: Supports both base64 and binary stream responses
+- **Format Conversion**: Automatic conversion to both base64 and Uint8Array for frontend compatibility
+
+**Rate Limiting:**
+
+- **Shared Infrastructure**: Both routes use the same `checkRateLimit` utility
+- **Per-endpoint Limits**: Separate daily limits for chat (20) and image (5) requests
+- **Storage**: Hybrid Upstash Redis + Cloudflare KV fallback
 
 ### Key Architectural Decisions
 
