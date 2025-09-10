@@ -174,36 +174,9 @@ export default function ChatPage() {
     e.preventDefault();
     if (input.trim()) {
       try {
-        // Pre-check rate limit before sending message
-        const rateLimitCheckResponse = await fetch('/api/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messages: [{ role: 'user', content: input }],
-            model: selectedModelRef.current,
-          }),
-        });
-
-        if (!rateLimitCheckResponse.ok) {
-          if (rateLimitCheckResponse.status === 429) {
-            const errorData: RateLimitResponseData = await rateLimitCheckResponse.json();
-            if (errorData.rateLimit) {
-              setRateLimitError({
-                message: errorData.error || 'Rate limit exceeded',
-                type: errorData.rateLimit.type || 'chat',
-                remaining: errorData.rateLimit.remaining || 0,
-                resetTime: errorData.rateLimit.resetTime || Date.now() + 24 * 60 * 60 * 1000,
-                isRateLimit: true,
-              });
-            }
-            return; // Don't proceed with sending the message
-          }
-        }
-
-        await sendMessage({ text: input });
+        const messageText = input; // Capture the current input value
         setInput('');
+        await sendMessage({ text: messageText });
       } catch (error: unknown) {
         // Handle rate limit errors from chat API (fallback for any other errors)
         console.error('Chat submission error:', error);

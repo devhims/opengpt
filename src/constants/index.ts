@@ -3,11 +3,11 @@
 // Organized by capabilities for future extensibility
 export const CLOUDFLARE_AI_MODELS = {
   textGeneration: [
-    // Llama 4 models
-    '@cf/meta/llama-4-scout-17b-16e-instruct',
     // GPT-OSS models
     '@cf/openai/gpt-oss-120b',
     '@cf/openai/gpt-oss-20b',
+    // Llama 4 models
+    '@cf/meta/llama-4-scout-17b-16e-instruct',
     // Llama 3.3 models
     '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     // Llama 3.1 models
