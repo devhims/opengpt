@@ -1,6 +1,7 @@
 'use client';
 
 import { MessageSquareIcon, ImageIcon } from 'lucide-react';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 
 interface ChatHeaderProps {
   mode: 'chat' | 'image';
@@ -24,29 +25,32 @@ export function ChatHeader({ mode, setMode, providerLabel }: ChatHeaderProps) {
             <div className="h-1.5 w-1.5 rounded-full bg-green-600"></div>
             {mode === 'chat' ? providerLabel : 'Cloudflare'}
           </div>
-          <div className="bg-muted flex rounded-lg border p-0.5 sm:p-1">
-            <button
-              onClick={() => setMode('chat')}
-              className={`flex items-center gap-1.5 rounded px-2 py-1.5 text-xs transition-colors sm:gap-2 sm:px-3 sm:py-1 sm:text-xs ${
-                mode === 'chat'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <MessageSquareIcon size={12} className="sm:h-[14px] sm:w-[14px]" />
-              <span>Chat</span>
-            </button>
-            <button
-              onClick={() => setMode('image')}
-              className={`flex items-center gap-1.5 rounded px-2 py-1.5 text-xs transition-colors sm:gap-2 sm:px-3 sm:py-1 sm:text-xs ${
-                mode === 'image'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <ImageIcon size={12} className="sm:h-[14px] sm:w-[14px]" />
-              <span>Image</span>
-            </button>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <ThemeToggle />
+            <div className="bg-muted flex rounded-lg border p-0.5 sm:p-1">
+              <button
+                onClick={() => setMode('chat')}
+                className={`flex items-center gap-1.5 rounded px-2 py-1.5 text-xs transition-colors sm:gap-2 sm:px-3 sm:py-1 sm:text-xs ${
+                  mode === 'chat'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <MessageSquareIcon size={12} className="sm:h-[14px] sm:w-[14px]" />
+                <span>Chat</span>
+              </button>
+              <button
+                onClick={() => setMode('image')}
+                className={`flex items-center gap-1.5 rounded px-2 py-1.5 text-xs transition-colors sm:gap-2 sm:px-3 sm:py-1 sm:text-xs ${
+                  mode === 'image'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <ImageIcon size={12} className="sm:h-[14px] sm:w-[14px]" />
+                <span>Image</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
