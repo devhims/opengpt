@@ -34,7 +34,7 @@ export function ChatHeader({ mode, setMode, providerLabel }: ChatHeaderProps) {
               }`}
             >
               <MessageSquareIcon size={12} className="sm:h-[14px] sm:w-[14px]" />
-              <span className="xs:inline hidden sm:inline">Chat</span>
+              <span>Chat</span>
             </button>
             <button
               onClick={() => setMode('image')}
@@ -45,7 +45,7 @@ export function ChatHeader({ mode, setMode, providerLabel }: ChatHeaderProps) {
               }`}
             >
               <ImageIcon size={12} className="sm:h-[14px] sm:w-[14px]" />
-              <span className="xs:inline hidden sm:inline">Image</span>
+              <span>Image</span>
             </button>
           </div>
         </div>

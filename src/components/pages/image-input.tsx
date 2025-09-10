@@ -114,7 +114,7 @@ export function ImageInput({
               {/* Advanced settings */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <PromptInputButton variant="ghost">
+                  <PromptInputButton variant="ghost" className="pr-2">
                     <SettingsIcon className="size-4" />
                   </PromptInputButton>
                 </DropdownMenuTrigger>
