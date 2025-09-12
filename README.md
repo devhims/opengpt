@@ -15,10 +15,9 @@ A modern AI playground that combines the **development experience of Next.js** w
 
 <div align="center">
 
-<video width="360" height="640" controls>
-  <source src="OpenGPTDemo.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+[![OpenGPT Demo](https://img.youtube.com/vi/r96QMlmngN4/maxresdefault.jpg)](https://www.youtube.com/shorts/r96QMlmngN4)
+
+_Click to watch the demo video_
 
 </div>
 
