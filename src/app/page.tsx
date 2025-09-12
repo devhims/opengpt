@@ -13,6 +13,8 @@ import { downloadImage, generateImage, ApiError } from '@/utils/image';
 import { getFormattedTextModels, getFormattedImageModels } from '@/utils/models';
 import { getModelSchema, type ImageModelId } from '@/schemas/image-models';
 import { toast } from 'sonner';
+import type { TranscriptionResult, AudioUploadParams } from '@/types';
+import { DEFAULT_AURA_TTS_SPEAKER, DEFAULT_TTS_MODEL, type AuraTTSSpeaker } from '@/constants';
 
 /**
  * Standard error response data structure
@@ -30,17 +32,21 @@ interface StandardErrorResponse {
 import { ChatHeader } from '@/components/pages/chat-header';
 import { ChatView } from '@/components/pages/chat-view';
 import { ImageView } from '@/components/pages/image-view';
+import { AudioView } from '@/components/pages/audio-view';
 import { ChatInput } from '@/components/pages/chat-input';
 import { ImageInput } from '@/components/pages/image-input';
+import { AudioInput } from '@/components/pages/audio-input';
 
 export default function ChatPage() {
   const models = getFormattedTextModels();
   const imageModels = getFormattedImageModels();
 
-  const [mode, setMode] = useState<'chat' | 'image'>('chat');
+  const [mode, setMode] = useState<'chat' | 'image' | 'speech'>('chat');
   const [input, setInput] = useState('');
   const [selectedModel, setSelectedModel] = useState<string>(models[0].value);
   const [selectedImageModel, setSelectedImageModel] = useState<string>(imageModels[0].value);
+  const [selectedTTSModel, setSelectedTTSModel] = useState<string>(DEFAULT_TTS_MODEL);
+  const [selectedSpeaker, setSelectedSpeaker] = useState<AuraTTSSpeaker>(DEFAULT_AURA_TTS_SPEAKER);
   const [copiedStates, setCopiedStates] = useState<Map<string, boolean>>(new Map());
   const stickContextRef = useRef<StickToBottomContext | null>(null);
 
@@ -49,10 +55,20 @@ export default function ChatPage() {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [, setGeneratingImageId] = useState<string | null>(null);
 
+  // Speech transcription states
+  const [transcriptionResults, setTranscriptionResults] = useState<TranscriptionResult[]>([]);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [audioParams, setAudioParams] = useState<AudioUploadParams>({
+    detectLanguage: false,
+    punctuate: true,
+    smartFormat: true,
+    file: null,
+  });
+
   // Rate limit error states
   const [rateLimitError, setRateLimitError] = useState<{
     message: string;
-    type: 'chat' | 'image';
+    type: 'chat' | 'image' | 'speech';
     remaining: number;
     resetTime: number;
     isRateLimit?: boolean;
@@ -308,6 +324,101 @@ export default function ChatPage() {
     }
   };
 
+  const handleAudioTranscription = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!audioParams.file) return;
+
+    const transcriptionId = Date.now().toString();
+    setIsTranscribing(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('audio', audioParams.file);
+
+      if (audioParams.detectLanguage) {
+        formData.append('detect_language', 'true');
+      }
+      if (audioParams.punctuate !== false) {
+        formData.append('punctuate', 'true');
+      }
+      if (audioParams.smartFormat !== false) {
+        formData.append('smart_format', 'true');
+      }
+
+      const response = await fetch('/api/speech-to-text', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = (await response.json()) as {
+          error: string;
+          rateLimit?: { type: string; remaining: number; resetTime: number };
+        };
+
+        // Handle rate limit errors
+        if (response.status === 429 && errorData.rateLimit) {
+          const rateLimitData = {
+            message: errorData.error,
+            type: 'speech' as const,
+            remaining: errorData.rateLimit.remaining,
+            resetTime: errorData.rateLimit.resetTime,
+            isRateLimit: true,
+          };
+          setRateLimitError(rateLimitData);
+          toast.error(rateLimitData.message, {
+            description: `Resets in ${formatResetTime(rateLimitData.resetTime)} • ${rateLimitData.remaining} remaining`,
+          });
+          return;
+        }
+
+        throw new Error(errorData.error || 'Transcription failed');
+      }
+
+      const result = (await response.json()) as {
+        success: boolean;
+        transcription?: TranscriptionResult;
+        metadata?: {
+          model: string;
+          fileName: string;
+          fileSize: number;
+          contentType: string;
+          processedAt: string;
+        };
+        error?: string;
+      };
+
+      if (result.success && result.transcription) {
+        const newTranscription: TranscriptionResult = {
+          ...result.transcription,
+          id: transcriptionId,
+          fileName: result.metadata?.fileName || audioParams.file!.name,
+          fileSize: result.metadata?.fileSize || audioParams.file!.size,
+          contentType: result.metadata?.contentType || audioParams.file!.type,
+          processedAt: result.metadata?.processedAt || new Date().toISOString(),
+        };
+
+        setTranscriptionResults((prev) => [newTranscription, ...prev]);
+        toast.success('Transcription completed', {
+          description: `Transcribed ${audioParams.file!.name}`,
+        });
+
+        // Clear the file after successful transcription
+        setAudioParams((prev) => ({ ...prev, file: null }));
+      } else {
+        throw new Error('Invalid transcription response');
+      }
+    } catch (error: unknown) {
+      console.error('Speech transcription error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Transcription failed';
+      toast.error('Transcription Failed', {
+        description: errorMessage,
+      });
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
   return (
     <div className="bg-background flex h-dvh flex-col">
       <ChatHeader mode={mode} setMode={setMode} providerLabel={providerLabel} />
@@ -320,6 +431,8 @@ export default function ChatPage() {
               status={status}
               copiedStates={copiedStates}
               stickContextRef={stickContextRef}
+              selectedSpeaker={selectedSpeaker}
+              selectedTTSModel={selectedTTSModel}
               onCopy={handleCopy}
               onRegenerate={regenerate}
             />
@@ -328,12 +441,16 @@ export default function ChatPage() {
               setInput={setInput}
               selectedModel={selectedModel}
               setSelectedModel={setSelectedModel}
+              selectedTTSModel={selectedTTSModel}
+              setSelectedTTSModel={setSelectedTTSModel}
+              selectedSpeaker={selectedSpeaker}
+              setSelectedSpeaker={setSelectedSpeaker}
               models={models}
               status={status}
               onSubmit={handleSubmit}
             />
           </>
-        ) : (
+        ) : mode === 'image' ? (
           <>
             <ImageView
               generatedImages={generatedImages}
@@ -349,6 +466,21 @@ export default function ChatPage() {
               onParamsChange={handleImageParamsChange}
               onSubmit={handleImageGeneration}
               isGenerating={isGeneratingImage}
+            />
+          </>
+        ) : (
+          <>
+            <AudioView
+              transcriptionResults={transcriptionResults}
+              isTranscribing={isTranscribing}
+              copiedStates={copiedStates}
+              onCopy={handleCopy}
+            />
+            <AudioInput
+              audioParams={audioParams}
+              onParamsChange={setAudioParams}
+              onSubmit={handleAudioTranscription}
+              isTranscribing={isTranscribing}
             />
           </>
         )}

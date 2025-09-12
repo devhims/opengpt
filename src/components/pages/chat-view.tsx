@@ -13,12 +13,15 @@ import { Message, MessageContent } from '@/components/ai-elements/message';
 import { Response } from '@/components/ai-elements/response';
 import { Loader } from '@/components/ai-elements/loader';
 import { ChatMessagePart } from './chat-message-part';
+import type { AuraTTSSpeaker } from '@/constants';
 
 interface ChatViewProps {
   messages: UIMessage[];
   status: string;
   copiedStates: Map<string, boolean>;
   stickContextRef: React.MutableRefObject<StickToBottomContext | null>;
+  selectedSpeaker: AuraTTSSpeaker;
+  selectedTTSModel: string;
   onCopy: (text: string, messageId: string) => void;
   onRegenerate: () => void;
 }
@@ -28,6 +31,8 @@ export function ChatView({
   status,
   copiedStates,
   stickContextRef,
+  selectedSpeaker,
+  selectedTTSModel,
   onCopy,
   onRegenerate,
 }: ChatViewProps) {
@@ -94,6 +99,8 @@ export function ChatView({
                     i === message.parts.length - 1 &&
                     message.id === messages.at(-1)?.id
                   }
+                  selectedSpeaker={selectedSpeaker}
+                  selectedTTSModel={selectedTTSModel}
                   copiedStates={copiedStates}
                   onCopy={onCopy}
                   onRegenerate={onRegenerate}

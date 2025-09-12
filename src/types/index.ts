@@ -36,3 +36,32 @@ export interface GeneratedImage {
   mediaType: string;
   uint8Array: number[];
 }
+
+// Audio Transcription Types
+export interface TranscriptionWord {
+  word: string;
+  start: number;
+  end: number;
+  confidence: number;
+  punctuated_word?: string;
+}
+
+export interface TranscriptionResult {
+  id: string;
+  transcript: string;
+  confidence?: number;
+  duration?: number;
+  language?: string;
+  words?: TranscriptionWord[];
+  fileName: string;
+  fileSize: number;
+  contentType: string;
+  processedAt: string;
+}
+
+export interface AudioUploadParams {
+  detectLanguage?: boolean;
+  punctuate?: boolean;
+  smartFormat?: boolean;
+  file?: File | null;
+}

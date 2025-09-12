@@ -3200,6 +3200,81 @@ declare abstract class Base_Ai_Cf_Openai_Whisper {
   inputs: Ai_Cf_Openai_Whisper_Input;
   postProcessedOutputs: Ai_Cf_Openai_Whisper_Output;
 }
+type Ai_Cf_Deepgram_Nova_3_Input = {
+  audio: {
+    body: ReadableStream<Uint8Array> | Uint8Array;
+    contentType: string;
+  };
+  detect_language?: boolean;
+  punctuate?: boolean;
+  smart_format?: boolean;
+  diarize?: boolean;
+  sentiment?: boolean;
+  topics?: boolean;
+  utterances?: boolean;
+  custom_topic?: string;
+  custom_topic_mode?: 'strict' | 'extended';
+  custom_intent?: string;
+  custom_intent_mode?: 'strict' | 'extended';
+  detect_entities?: boolean;
+  filler_words?: boolean;
+  keyterm?: string;
+  keywords?: string;
+  language?: string;
+  measurements?: boolean;
+  mip_opt_out?: boolean;
+  mode?: 'general' | 'medical' | 'finance';
+  multichannel?: boolean;
+  numerals?: boolean;
+  paragraphs?: boolean;
+  profanity_filter?: boolean;
+  redact?: string;
+  replace?: string;
+  search?: string;
+  utt_split?: number;
+  channels?: number;
+  interim_results?: boolean;
+  endpointing?: string;
+  vad_events?: boolean;
+  utterance_end_ms?: boolean;
+};
+type Ai_Cf_Deepgram_Nova_3_Output = {
+  results?: {
+    channels?: Array<{
+      alternatives?: Array<{
+        transcript?: string;
+        confidence?: number;
+        words?: Array<{
+          word: string;
+          start: number;
+          end: number;
+          confidence: number;
+        }>;
+      }>;
+    }>;
+    summary?: {
+      result?: string;
+      short?: string;
+    };
+    sentiments?: {
+      segments?: Array<{
+        text: string;
+        start_word: number;
+        end_word: number;
+        sentiment: string;
+        sentiment_score: number;
+      }>;
+      average?: {
+        sentiment: string;
+        sentiment_score: number;
+      };
+    };
+  };
+};
+declare abstract class Base_Ai_Cf_Deepgram_Nova_3 {
+  inputs: Ai_Cf_Deepgram_Nova_3_Input;
+  postProcessedOutputs: Ai_Cf_Deepgram_Nova_3_Output;
+}
 type Ai_Cf_Meta_M2M100_1_2B_Input =
   | {
       /**
@@ -5676,6 +5751,7 @@ interface AiModels {
   '@cf/llava-hf/llava-1.5-7b-hf': BaseAiImageToText;
   '@cf/baai/bge-base-en-v1.5': Base_Ai_Cf_Baai_Bge_Base_En_V1_5;
   '@cf/openai/whisper': Base_Ai_Cf_Openai_Whisper;
+  '@cf/deepgram/nova-3': Base_Ai_Cf_Deepgram_Nova_3;
   '@cf/meta/m2m100-1.2b': Base_Ai_Cf_Meta_M2M100_1_2B;
   '@cf/baai/bge-small-en-v1.5': Base_Ai_Cf_Baai_Bge_Small_En_V1_5;
   '@cf/baai/bge-large-en-v1.5': Base_Ai_Cf_Baai_Bge_Large_En_V1_5;

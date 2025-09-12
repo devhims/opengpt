@@ -2,7 +2,7 @@
 
 ## Overview
 
-This application provides a modern dual-mode interface for interacting with Cloudflare Workers AI models, featuring **chat conversation mode** and **image generation mode**. Built with **AI Elements UI components**, **intelligent reasoning token parsing**, and **dual-pathway API handling**, the architecture supports both text generation and image generation models through **AI SDK v5** standards with enhanced UX through reasoning visualization and seamless model switching.
+This application provides a modern quad-mode interface for interacting with Cloudflare Workers AI models, featuring **chat conversation mode**, **image generation mode**, **speech-to-text transcription**, and **text-to-speech synthesis**. Built with **AI Elements UI components**, **intelligent reasoning token parsing**, and **multi-pathway API handling**, the architecture supports text generation, image generation, speech recognition, and speech synthesis through **AI SDK v5** standards with enhanced UX through reasoning visualization, real-time audio playback, and seamless model switching.
 
 ## System Architecture
 
@@ -15,30 +15,43 @@ graph TB
 
     ModeToggle --> Chat[💬 Chat Mode]
     ModeToggle --> ImageGen[🖼️ Image Generation Mode]
+    ModeToggle --> Speech[🎙️ Speech-to-Text Mode]
 
     Chat --> ChatAPI[🚀 Chat API Route]
     ImageGen --> ImageAPI[🎨 Image API Route]
+    Speech --> SpeechAPI[🎵 Speech API Route]
+    TTS --> TTSAPI[🔊 Text-to-Speech API Route]
 
     ChatAPI --> RateLimit1[🚫 Rate Limiter]
     ImageAPI --> RateLimit2[🚫 Rate Limiter]
+    SpeechAPI --> RateLimit3[🚫 Rate Limiter]
+    TTSAPI --> RateLimit4[🚫 Rate Limiter]
 
     RateLimit1 --> TextModels[🤖 Text Generation Models]
     RateLimit2 --> ImageModels[🎨 Image Generation Models]
+    RateLimit3 --> SpeechModels[🎵 Speech-to-Text Models]
+    RateLimit4 --> TTSModels[🔊 Text-to-Speech Models]
 
     UI --> Components[📦 UI Components]
     Components --> Reasoning[🧠 Reasoning Component]
     Components --> Messages[💭 Message Components]
     Components --> ImageComp[🖼️ Image Component]
+    Components --> SpeechComp[🎵 Speech Component]
+    Components --> SpeakerComp[🔊 Speaker Component]
     Components --> Actions[⚡ Action Components]
 
     ChatAPI --> Standard[📡 Standard Models]
     ChatAPI --> GPT[🔧 GPT-OSS Models]
     ImageAPI --> FLUX[🌟 FLUX-1-Schnell]
     ImageAPI --> StableDiff[🎭 Stable Diffusion Models]
+    SpeechAPI --> Nova3[🌟 Nova-3 Deepgram]
+    TTSAPI --> Aura1[🎙️ Aura-1 Deepgram]
 
     Standard --> Stream[🌊 Real Streaming]
     GPT --> Batch[📋 Batch Processing]
     FLUX --> ImageResponse[🖼️ Base64/Binary Response]
+    Nova3 --> Transcription[📝 Audio Transcription]
+    Aura1 --> Speech[🔊 Text-to-Speech]
 
     TextModels --> Response[📨 AI Response]
     Response --> Parser[🔍 Reasoning Parser]
@@ -48,8 +61,18 @@ graph TB
     ImageResponse --> Gallery[🎞️ Image Gallery]
     Gallery --> UI
 
+    SpeechModels --> Transcription
+    Transcription --> TranscriptUI[📝 Transcript Display]
+    TranscriptUI --> UI
+
+    TTSModels --> Speech
+    Speech --> AudioUI[🔊 Audio Playback]
+    AudioUI --> UI
+
     RateLimit1 --> Storage1[💾 Redis/KV Storage]
     RateLimit2 --> Storage1
+    RateLimit3 --> Storage1
+    RateLimit4 --> Storage1
 ```
 
 ### Complete Request Lifecycle
@@ -60,6 +83,8 @@ flowchart TD
 
     UIAction -->|💬 Chat Message| ChatPath[📝 Chat Request Path]
     UIAction -->|🖼️ Image Prompt| ImagePath[🎨 Image Request Path]
+    UIAction -->|🎵 Audio File| SpeechPath[🎵 Speech Request Path]
+    UIAction -->|🔊 Speak Text| TTSPath[🔊 Text-to-Speech Request Path]
 
     %% Chat Path
     ChatPath --> ChatValidate[✅ Frontend Validation]
@@ -89,7 +114,7 @@ flowchart TD
     ImageValidate --> ImageAPI[📡 POST /api/image]
 
     ImageAPI --> ImageParse[📋 Parse Request Body]
-    ImageParse --> ImageValidateAPI[✅ Server Validation]
+    ImageAPI --> ImageValidateAPI[✅ Server Validation]
     ImageValidateAPI --> ImageRateLimit[🚫 Rate Limit Check]
 
     ImageRateLimit --> ImageRateResult{Rate Limit OK?}
@@ -105,13 +130,53 @@ flowchart TD
     ImageBase64 --> ImageSuccess[✅ Image Response]
     ImageBinary --> ImageSuccess
 
+    %% Speech Path
+    SpeechPath --> SpeechValidate[✅ Frontend File Validation]
+    SpeechValidate --> SpeechPreCheck[🔍 Optional Rate Limit Pre-check]
+    SpeechPreCheck --> SpeechAPI[📡 POST /api/speech-to-text]
+
+    SpeechAPI --> SpeechParse[📋 Parse Form Data]
+    SpeechParse --> SpeechValidateAPI[✅ Server File Validation]
+    SpeechValidateAPI --> SpeechRateLimit[🚫 Rate Limit Check]
+
+    SpeechRateLimit --> SpeechRateResult{Rate Limit OK?}
+    SpeechRateResult -->|❌ No| SpeechRateError[429 Rate Limit Error]
+    SpeechRateResult -->|✅ Yes| SpeechProcess[🔄 Process Audio]
+
+    SpeechProcess --> SpeechModel[🎵 Nova-3 Deepgram Processing]
+    SpeechModel --> SpeechTranscribe[📝 Audio Transcription]
+
+    SpeechTranscribe --> SpeechSuccess[✅ Transcription Response]
+
+    %% TTS Path
+    TTSPath --> TTSValidate[✅ Frontend Text Validation]
+    TTSValidate --> TTSPreCheck[🔍 Optional Rate Limit Pre-check]
+    TTSPreCheck --> TTSAPI[📡 POST /api/text-to-speech]
+
+    TTSAPI --> TTSTextParse[📋 Parse Text Request]
+    TTSTextParse --> TTSValidateAPI[✅ Server Text Validation]
+    TTSValidateAPI --> TTSRateLimit[🚫 Rate Limit Check]
+
+    TTSRateLimit --> TTSRateResult{Rate Limit OK?}
+    TTSRateResult -->|❌ No| TTSRateError[429 Rate Limit Error]
+    TTSRateResult -->|✅ Yes| TTSProcess[🔄 Generate Speech]
+
+    TTSProcess --> TTSAura1[🎙️ Aura-1 Deepgram Processing]
+    TTSAura1 --> TTSSpeechGen[🔊 Speech Generation]
+
+    TTSSpeechGen --> TTSSuccess[✅ Audio Response]
+
     %% Error Handling
     ChatRateError --> FrontendError[🎨 Frontend Error Display]
     ImageRateError --> FrontendError
+    SpeechRateError --> FrontendError
+    TTSRateError --> FrontendError
 
     %% Success Responses
     ChatSuccess --> FrontendSuccess[🎨 Frontend Success Display]
     ImageSuccess --> FrontendSuccess
+    SpeechSuccess --> FrontendSuccess
+    TTSSuccess --> FrontendSuccess
 
     FrontendError --> UserFeedback[👤 User Sees Error]
     FrontendSuccess --> UserContent[👤 User Sees Content]
@@ -153,6 +218,30 @@ flowchart TD
 - **Output Format**: Dual format support (base64 + Uint8Array) for frontend compatibility
 - **Parameter Optimization**: Model-specific parameter validation and optimal payload generation
 - **Advanced Features**: Img2img, inpainting, and mask support with proper validation
+
+**Speech-to-Text API (`src/app/api/speech-to-text/route.ts`):**
+
+- **Runtime**: Cloudflare Workers Runtime via OpenNext
+- **AI Integration**: Direct Cloudflare Workers AI binding (`env.AI.run`) with nova-3 Deepgram model
+- **File Support**: MP3, WAV, MP4, M4A, AAC, OGG, WebM, FLAC audio formats (25MB max)
+- **Form Data Processing**: Multipart form data handling with file validation and content type checking
+- **Response Processing**: Structured transcription output with confidence scores, timestamps, and word-level details
+- **Optional Features**: Language detection, punctuation, smart formatting, diarization, sentiment analysis
+- **Error Handling**: Comprehensive validation for file type, size, and processing errors
+- **Rate Limiting**: 10 transcriptions per day per user (configurable)
+
+**Text-to-Speech API (`src/app/api/text-to-speech/route.ts`):**
+
+- **Runtime**: Cloudflare Workers Runtime via OpenNext
+- **AI Integration**: Direct Cloudflare Workers AI binding (`env.AI.run`) with aura-1 Deepgram model
+- **Text Support**: Up to 10,000 characters per request with automatic validation
+- **Speaker Options**: 12 different speakers (angus, asteria, arcas, orion, orpheus, athena, luna, zeus, perseus, helios, hera, stella)
+- **Audio Formats**: MP3, WAV, FLAC, OGG, AAC output formats with customizable sample rates
+- **Request Processing**: JSON-based request handling with comprehensive parameter validation
+- **Response Processing**: Base64-encoded audio with proper content-type headers and metadata
+- **Real-time Playback**: Client-side audio playback with play/pause controls and error handling
+- **Error Handling**: Comprehensive validation for text length, speaker selection, and audio generation errors
+- **Rate Limiting**: 10 TTS generations per day per user (configurable)
 
 ## Component Architecture
 
@@ -748,6 +837,72 @@ graph TD
   - **ByteDance SDXL**: Fast SDXL variant with reduced steps
   - **Dreamshaper 8 LCM**: Specialized for consistent style generation
 
+### Speech-to-Text Models
+
+```mermaid
+graph TD
+    SpeechModels[🎵 Speech-to-Text Models] --> Deepgram[🎙️ Deepgram Family]
+
+    Deepgram --> Nova3[Nova-3 ASR Model]
+
+    Nova3 --> Features[📋 Advanced Features]
+    Features --> LanguageDetect[🌍 Language Detection]
+    Features --> Punctuation[📝 Auto Punctuation]
+    Features --> Diarization[👥 Speaker Diarization]
+    Features --> Sentiment[😊 Sentiment Analysis]
+    Features --> Topics[🏷️ Topic Detection]
+```
+
+**Speech Model Categories:**
+
+- **Deepgram Nova-3**: State-of-the-art automatic speech recognition
+  - **Capabilities**: High-accuracy transcription with advanced features
+  - **Languages**: Multi-language support with automatic detection
+  - **Features**: Punctuation, formatting, diarization, sentiment analysis
+  - **Audio Formats**: MP3, WAV, MP4, M4A, AAC, OGG, WebM, FLAC
+  - **Cost**: $0.0052 per audio minute (HTTP) / $0.0092 per audio minute (WebSocket)
+
+### Text-to-Speech Models
+
+```mermaid
+graph TD
+    TTSModels[🔊 Text-to-Speech Models] --> DeepgramAura[🎙️ Deepgram Aura-1]
+
+    DeepgramAura --> Aura1[Aura-1 TTS Model]
+
+    Aura1 --> Speakers[👥 12 Speakers]
+    Speakers --> Angus[Angus - Male]
+    Speakers --> Asteria[Asteria - Female]
+    Speakers --> Arcas[Arcus - Male]
+    Speakers --> Orion[Orion - Male]
+    Speakers --> Orpheus[Orpheus - Male]
+    Speakers --> Athena[Athena - Female]
+    Speakers --> Luna[Luna - Female]
+    Speakers --> Zeus[Zeus - Male]
+    Speakers --> Perseus[Perseus - Male]
+    Speakers --> Helios[Helios - Male]
+    Speakers --> Hera[Hera - Female]
+    Speakers --> Stella[Stella - Female]
+
+    Aura1 --> Formats[🎵 Output Formats]
+    Formats --> MP3[MP3 Audio]
+    Formats --> WAV[WAV Audio]
+    Formats --> FLAC[FLAC Audio]
+    Formats --> OGG[OGG Audio]
+    Formats --> AAC[AAC Audio]
+```
+
+**Text-to-Speech Model Categories:**
+
+- **Deepgram Aura-1**: Advanced text-to-speech with natural expression and pacing
+  - **Capabilities**: Context-aware speech synthesis with natural intonation and fillers
+  - **Speakers**: 12 diverse voices (6 male, 6 female) with distinct personalities
+  - **Languages**: English with natural American accents and speech patterns
+  - **Features**: Automatic pacing, expressiveness, and conversational fillers based on text context
+  - **Audio Quality**: High-fidelity audio with customizable sample rates (8kHz to 48kHz)
+  - **Output Formats**: MP3, WAV, FLAC, OGG, AAC with configurable bitrates
+  - **Cost**: $0.015 per 1k characters + $0.00011 per step for advanced features
+
 ## Rate Limiting & Usage Control
 
 ### Rate Limiting Implementation Flow
@@ -831,6 +986,14 @@ export const RATE_LIMITS = {
   },
   image: {
     maxRequests: 5, // 5 image generations per day
+    windowMs: 24 * 60 * 60 * 1000, // 24 hours
+  },
+  speech: {
+    maxRequests: 10, // 10 speech transcriptions per day
+    windowMs: 24 * 60 * 60 * 1000, // 24 hours
+  },
+  tts: {
+    maxRequests: 10, // 10 text-to-speech generations per day
     windowMs: 24 * 60 * 60 * 1000, // 24 hours
   },
 } as const;
@@ -1115,12 +1278,12 @@ npm run deploy       # Deploy to Cloudflare Workers globally
 
 ---
 
-This architecture represents a **modern, production-ready AI application** that successfully combines **dual-mode AI interactions**, **cutting-edge UI components**, **intelligent reasoning visualization**, and **robust multi-model support** into a seamless user experience. The implementation demonstrates advanced patterns for building sophisticated AI interfaces that support both conversational AI and generative AI capabilities with current best practices.
+This architecture represents a **modern, production-ready AI application** that successfully combines **quad-mode AI interactions**, **cutting-edge UI components**, **intelligent reasoning visualization**, and **robust multi-model support** into a seamless user experience. The implementation demonstrates advanced patterns for building sophisticated AI interfaces that support conversational AI, generative AI, speech-to-text, and text-to-speech capabilities with current best practices.
 
 **Key Architectural Highlights:**
 
-- **Unified Dual-Mode Interface**: Seamless chat and image generation in a single application
-- **Comprehensive Model Support**: 70+ text generation models + 6 image generation models
-- **Advanced UI Components**: Custom Image component with base64/Uint8Array support
-- **Performance Optimized**: Sub-300ms text responses, 1-3s image generation
+- **Unified Quad-Mode Interface**: Seamless chat, image generation, speech-to-text, and text-to-speech in a single application
+- **Comprehensive Model Support**: 70+ text generation models + 6 image generation models + speech recognition + text-to-speech
+- **Advanced UI Components**: Custom Image, Speech, and Speaker components with full format support and real-time audio playback
+- **Performance Optimized**: Sub-300ms text responses, 1-3s image generation, accurate speech transcription, and instant TTS playback
 - **Production Ready**: Cloudflare Workers deployment with global edge distribution

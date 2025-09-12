@@ -79,7 +79,8 @@ export const CLOUDFLARE_AI_MODELS = {
     // '@cf/runwayml/stable-diffusion-v1-5-img2img',
   ] as const,
   embeddings: [] as const,
-  speech: [] as const,
+  speech: ['@cf/deepgram/nova-3'] as const,
+  textToSpeech: ['@cf/deepgram/aura-1', '@cf/myshell-ai/melotts'] as const,
 } as const;
 
 // Default model to use when none is specified
@@ -101,6 +102,62 @@ export function getEmbeddingModels(): readonly string[] {
 export function getSpeechModels(): readonly string[] {
   return CLOUDFLARE_AI_MODELS.speech;
 }
+
+export function getTextToSpeechModels(): readonly string[] {
+  return CLOUDFLARE_AI_MODELS.textToSpeech;
+}
+
+// TTS Speaker voices supported by Aura-1
+export const AURA_TTS_SPEAKERS = [
+  'angus',
+  'asteria',
+  'arcas',
+  'orion',
+  'orpheus',
+  'athena',
+  'luna',
+  'zeus',
+  'perseus',
+  'helios',
+  'hera',
+  'stella',
+] as const;
+
+export type AuraTTSSpeaker = (typeof AURA_TTS_SPEAKERS)[number];
+
+// Default TTS speaker for Aura-1
+export const DEFAULT_AURA_TTS_SPEAKER = 'luna' as const;
+
+// TTS Models (convenience constants that map to CLOUDFLARE_AI_MODELS.textToSpeech)
+export const TTS_MODELS = {
+  AURA_1: '@cf/deepgram/aura-1',
+  MELO_TTS: '@cf/myshell-ai/melotts',
+} as const;
+
+export const DEFAULT_TTS_MODEL = TTS_MODELS.AURA_1;
+
+// Supported languages for MeloTTS (uppercase codes as required by API)
+export const MELO_TTS_LANGUAGES = [
+  'EN', // English (Default)
+  'ES', // Spanish
+  'FR', // French
+  'ZH', // Chinese
+  'JP', // Japanese
+  'KR', // Korean
+] as const;
+
+// English accent speakers for MeloTTS (when lang='EN')
+export const MELO_TTS_ENGLISH_SPEAKERS = [
+  'EN-Default', // English (Default)
+  'EN-US', // English (American)
+  'EN-BR', // English (British)
+  'EN_INDIA', // English (Indian)
+  'EN-AU', // English (Australian)
+] as const;
+
+export type MeloTTSLanguage = (typeof MELO_TTS_LANGUAGES)[number];
+export type MeloTTSEnglishSpeaker = (typeof MELO_TTS_ENGLISH_SPEAKERS)[number];
+export const DEFAULT_MELO_TTS_LANGUAGE = 'EN' as const;
 
 // Helper function to get models by category (within text generation)
 export function getModelsByCategory(): Record<string, readonly string[]> {

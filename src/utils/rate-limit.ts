@@ -12,6 +12,14 @@ export const RATE_LIMITS = {
     maxRequests: 5,
     windowMs: 24 * 60 * 60 * 1000, // 24 hours
   },
+  speech: {
+    maxRequests: 10,
+    windowMs: 24 * 60 * 60 * 1000, // 24 hours
+  },
+  tts: {
+    maxRequests: 10,
+    windowMs: 24 * 60 * 60 * 1000, // 24 hours
+  },
 } as const;
 
 export type RateLimitType = keyof typeof RATE_LIMITS;

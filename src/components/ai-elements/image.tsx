@@ -8,6 +8,7 @@ export type ImageProps = Experimental_GeneratedImage & {
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const Image = ({ base64, uint8Array: _unused, mediaType, ...props }: ImageProps) => (
+  // eslint-disable-next-line @next/next/no-img-element
   <img
     {...props}
     alt={props.alt}
