@@ -9,7 +9,7 @@
 
 <br />
 
-A modern AI playground that combines the **development experience of Next.js** with the **performance of Cloudflare Workers**. Experiment with 50+ open-source AI models, including GPT-OSS, Leonardo, Llama, Qwen, Gemini, DeepSeek, and more. Features text-to-speech with multiple voices and real-time speech-to-text transcription.
+A modern AI playground that combines the **development experience of Next.js** with the **performance of Cloudflare Workers** platform. Experiment with 50+ open-source AI models, including GPT-OSS, Leonardo, Llama, Qwen, Gemini, DeepSeek, and more. Features text-to-speech with multiple voices and real-time speech-to-text transcription.
 
 </div>
 
@@ -45,7 +45,7 @@ OpenGPT leverages three core technologies to deliver an exceptional AI developme
 
 ### 💬 **Multi-Modal AI Interface**
 
-- **Chat Mode**: Conversational AI with 50+ text generation models
+- **Chat Mode**: Conversational AI with 30+ text generation models
 - **Image Mode**: High-quality image generation with 5+ image models
 - **Text-to-Speech (TTS)**: Voice synthesis with multiple speaker options
 - **Speech-to-Text (STT)**: Real-time audio transcription with visual feedback
@@ -59,13 +59,13 @@ OpenGPT leverages three core technologies to deliver an exceptional AI developme
 
 ### 🎨 **Modern User Experience**
 
-- **AI Elements UI**: Professional, accessible components built using [AI Elements](https://ai-sdk.dev/elements/overview)
-- **Responsive Design**: Mobile-first with smooth interactions
+- **AI Elements UI**: Professional, accessible components built with [AI Elements](https://ai-sdk.dev/elements/overview)
+- **Responsive Design**: Mobile-first responsive interactions
 - **Real-time Streaming**: See responses as they're generated
 
 ### 🔧 **Developer Experience**
 
-- **Type Safety**: Full TypeScript with Cloudflare bindings
+- **Type Safety**: Full TypeScript support
 - **One-Command Deploy**: `pnpm deploy` to Cloudflare Workers globally
 
 ## 🚀 **Getting Started**
@@ -116,7 +116,7 @@ wrangler secret put NEXTJS_ENV
 
 ## 🤖 **Supported AI Models**
 
-### Text Generation (50+ Models)
+### Text Generation (30+ Models)
 
 - **GPT-OSS**: OpenAI-compatible 20B and 120B variants
 - **Meta Llama**: 4 Scout 17B, 3.3 70B, 3.1 family (6 variants), 3.2 family (3 variants), 3.0 family (3 variants)
@@ -124,7 +124,6 @@ wrangler secret put NEXTJS_ENV
 - **Mistral**: Small 3.1 24B, 7B v0.1/v0.2 variants (5 total)
 - **Qwen**: QWQ 32B, 2.5 Coder 32B, and 1.5 family variants (6 total)
 - **DeepSeek**: R1 Distill Qwen 32B, Math 7B, Coder variants (4 total)
-- **Other Models**: Falcon, Phi-2, TinyLlama, SQLCoder, and 10+ specialized models
 
 ### Image Generation (5+ Models)
 
@@ -137,7 +136,7 @@ wrangler secret put NEXTJS_ENV
 
 - **Text-to-Speech (TTS)**:
   - **Deepgram Aura-1**: 12+ expressive voices (Luna, Athena, Zeus, Angus, etc.)
-  - **MyShell.ai MeloTTS**: Multi-language support (EN, ES, FR, ZH, JP, KR) with regional accents
+  - **MeloTTS**: Multi-language support (EN, ES, FR, ZH, JP, KR) with regional accents
 - **Speech-to-Text (STT)**:
   - **Deepgram Nova-3**: High-accuracy real-time transcription with punctuation
 
@@ -208,121 +207,6 @@ flowchart TD
     SpeechSuccess --> ResponseUI
 ```
 
-## 🌊 **Request Flow Architecture**
-
-Detailed end-to-end request processing from user interaction to AI generation:
-
-```mermaid
-flowchart TD
-    Start[👤 User Input] --> InputType{Input Type}
-
-    %% Chat Path
-    InputType -->|💬 Chat Message| ChatUI[🎨 Chat UI Processing]
-    ChatUI --> ChatValidate[✅ Validate Message]
-    ChatValidate --> ChatRequest[📡 POST /api/chat]
-
-    ChatRequest --> ChatParse[📋 Parse Request Body]
-    ChatParse --> ChatRateLimit["🚫 checkRateLimit req chat"]
-    ChatRateLimit --> ChatRateCheck{Rate Limit OK?}
-
-    ChatRateCheck -->|❌ No| ChatRateError[429: Rate Limit Exceeded]
-    ChatRateCheck -->|✅ Yes| ChatModelCheck{Model Type}
-
-    %% Chat - Standard Models Path
-    ChatModelCheck -->|Standard Models| ChatStandard["🔧 processMessages"]
-    ChatStandard --> ChatWorkersAI["🤖 createWorkersAI binding env.AI"]
-    ChatWorkersAI --> ChatStreamText["🌊 streamText model messages"]
-    ChatStreamText --> ChatWorkers1[☁️ Cloudflare Workers AI]
-    ChatWorkers1 --> ChatStream[📤 Real-time SSE Stream]
-
-    %% Chat - GPT-OSS Models Path
-    ChatModelCheck -->|GPT-OSS Models| ChatGPT["🎯 handleGptOssModel"]
-    ChatGPT --> ChatDirectRun["📡 env.AI.run model input"]
-    ChatDirectRun --> ChatWorkers2[☁️ Cloudflare Workers AI]
-    ChatWorkers2 --> ChatExtract["📋 extractGptOssResponse"]
-    ChatExtract --> ChatEmulated["🌊 createUIMessageStream"]
-
-    %% Image Path
-    InputType -->|🖼️ Image Prompt| ImageUI[🎨 Image UI Processing]
-    ImageUI --> ImageValidate[✅ Validate Prompt & Params]
-    ImageValidate --> ImageRequest[📡 POST /api/image]
-
-    ImageRequest --> ImageParse[📋 Parse Request Body]
-    ImageParse --> ImageRateLimit2["🚫 checkRateLimit req image"]
-    ImageRateLimit2 --> ImageRateCheck{Rate Limit OK?}
-
-    ImageRateCheck -->|❌ No| ImageRateError[429: Rate Limit Exceeded]
-    ImageRateCheck -->|✅ Yes| ImageOptimal["🔧 generateOptimalPayload"]
-    ImageOptimal --> ImageDirectRun2["📡 env.AI.run model payload"]
-    ImageDirectRun2 --> ImageWorkers[☁️ Cloudflare Workers AI]
-
-    %% Speech Path
-    InputType -->|🎤 Voice Input| SpeechUI[🎨 Speech UI Processing]
-    InputType -->|📝 Text Input| TTSUI[🎨 TTS UI Processing]
-
-    SpeechUI --> SpeechValidate[✅ Validate Audio File]
-    SpeechValidate --> SpeechRequest[📡 POST /api/speech-to-text]
-
-    TTSUI --> TTSValidate[✅ Validate Text & Voice]
-    TTSValidate --> TTSRequest[📡 POST /api/text-to-speech]
-
-    SpeechRequest --> SpeechParse[📋 Parse Audio Request]
-    SpeechParse --> SpeechRateLimit["🚫 checkRateLimit req speech"]
-    SpeechRateLimit --> SpeechRateCheck{Rate Limit OK?}
-
-    TTSRequest --> TTSParse[📋 Parse TTS Request]
-    TTSParse --> TTSRateLimit["🚫 checkRateLimit req tts"]
-    TTSRateLimit --> TTSRateCheck{Rate Limit OK?}
-
-    SpeechRateCheck -->|❌ No| SpeechRateError[429: Rate Limit Exceeded]
-    SpeechRateCheck -->|✅ Yes| SpeechDirectRun["📡 env.AI.run @cf/deepgram/nova-3"]
-    SpeechDirectRun --> SpeechWorkers[☁️ Cloudflare Workers AI]
-
-    TTSRateCheck -->|❌ No| TTSRateError[429: Rate Limit Exceeded]
-    TTSRateCheck -->|✅ Yes| TTSDirectRun["📡 env.AI.run @cf/deepgram/aura-1 | @cf/myshell-ai/melotts"]
-    TTSDirectRun --> TTSWorkers[☁️ Cloudflare Workers AI]
-
-    %% Image Response Processing
-    ImageWorkers --> ImageFormat{Response Format}
-    ImageFormat -->|Base64| ImageBase64[📝 Extract response.image]
-    ImageFormat -->|Binary Stream| ImageBinary["🔄 streamToBase64"]
-    ImageBase64 --> ImageConvert[🔢 Convert to Uint8Array]
-    ImageBinary --> ImageConvert
-
-    %% Speech Response Processing
-    SpeechWorkers --> SpeechExtract[📝 Extract transcription.text]
-    SpeechExtract --> SpeechSuccess[✅ STT Response with Text]
-
-    TTSWorkers --> TTSFormat{Response Format}
-    TTSFormat -->|Base64 Audio| TTSAudio[🔊 Extract response.audio]
-    TTSAudio --> TTSConvert[🔊 Convert to playable audio]
-    TTSConvert --> TTSSuccess[✅ TTS Audio Response]
-
-    %% Success Responses
-    ChatStream --> ChatReasoning[🧠 Parse Reasoning Tokens]
-    ChatEmulated --> ChatReasoning
-    ChatReasoning --> ChatSuccess[✅ Chat Response with Reasoning]
-
-    ImageConvert --> ImageSuccess[✅ Image Response with Metadata]
-    SpeechSuccess --> SpeechFinal[✅ STT Response]
-    TTSSuccess --> TTSFinal[✅ TTS Response]
-
-    %% Error Handling
-    ChatRateError --> ErrorDisplay[🎨 Rate Limit Banner]
-    ImageRateError --> ErrorDisplay
-    SpeechRateError --> ErrorDisplay
-    TTSRateError --> ErrorDisplay
-
-    %% Final Display
-    ChatSuccess --> FinalDisplay[📱 Frontend Display]
-    ImageSuccess --> FinalDisplay
-    SpeechFinal --> FinalDisplay
-    TTSFinal --> FinalDisplay
-    ErrorDisplay --> FinalDisplay
-
-    FinalDisplay --> UserExperience[👤 User Sees Result]
-```
-
 ### Key Implementation Details
 
 **Chat Route Processing:**
@@ -349,14 +233,6 @@ flowchart TD
 - **Shared Infrastructure**: Both routes use the same `checkRateLimit` utility
 - **Per-endpoint Limits**: Separate daily limits for chat (20), image (5), and speech (10) requests
 - **Storage**: Hybrid Upstash Redis + Cloudflare KV fallback
-
-### Key Architectural Decisions
-
-- **🔗 OpenNext**: Seamless Next.js to Cloudflare Workers deployment with global edge distribution
-- **🤖 AI SDK v5**: Type-safe, streaming AI interactions with reasoning token support
-- **🧠 Reasoning Tokens**: Enhanced AI thinking process visualization with collapsible UI
-- **🚫 Rate Limiting**: Hybrid Upstash Redis + Cloudflare KV approach with IP-based daily limits
-- **⚡ Multi-Modal Processing**: Separate optimized pathways for chat, image, and speech processing
 
 ### Request Processing Flow
 
