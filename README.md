@@ -156,7 +156,7 @@ flowchart TD
 
     ChatPath --> ChatAPI[📡 /api/chat]
     ImagePath --> ImageAPI[📡 /api/image]
-    SpeechPath --> SpeechAPI[📡 /api/speech-to-text | /api/text-to-speech]
+    SpeechPath --> SpeechAPI["📡 /api/speech-to-text | /api/text-to-speech"]
 
     ChatAPI --> RateLimit1[🚫 Rate Limiter]
     ImageAPI --> RateLimit2[🚫 Rate Limiter]
